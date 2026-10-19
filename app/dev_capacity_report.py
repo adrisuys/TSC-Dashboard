@@ -145,7 +145,20 @@ def legend(title, rows):
 # --- scope -------------------------------------------------------------------
 
 def select_devs(kw, cfg, needle):
-    """[(user_id, employee_id, name)] in configured order, so runs are stable."""
+    """([(user_id, [employee_ids], name)], {name: primary employee},
+    {name: [every employee record]} for those holding more than one) — in
+    configured order, so runs are stable.
+
+    A developer is found through their *user*, not the employee name: the same
+    person can hold one `hr.employee` per company (`David Andrian` at TSC
+    France and `David Andrian (BE)` at The Service Company, almost all his
+    hours on the second). Matching the name kept only the first record and read
+    him as idle. Every record of the user is kept and their lines summed —
+    `dev_timesheet_report.resolve_devs` does the same. An employee with the
+    configured name but no user link is still picked up, by name.
+
+    The primary record — whose calendar is the developer's week — is the one
+    they book the most hours on over the last year (`primary_employee`)."""
     names = cfg["dev_names"]
     if needle:
         matches = [n for n in names if needle.lower() in n.lower()]
@@ -157,21 +170,60 @@ def select_devs(kw, cfg, needle):
         names = matches
     users = {u["name"]: u["id"] for u in
              kw("res.users", "search_read", [[["name", "in", names]]], {"fields": ["name"]})}
-    found = kw("hr.employee", "search_read", [[["name", "in", names]]],
-               {"fields": ["name", "resource_calendar_id", "company_id"]})
-    employees, duplicated = {}, set()
-    for e in found:
-        # First one wins: a name duplicated across companies would otherwise
-        # double every hour. Reported in section E.
-        if e["name"] in employees:
-            duplicated.add(e["name"])
-            continue
-        employees[e["name"]] = e
-    out = []
+    found = kw("hr.employee", "search_read",
+               [["|", ["user_id", "in", sorted(users.values())], ["name", "in", names]]],
+               {"fields": ["name", "user_id", "resource_calendar_id", "company_id"]})
+    name_of_uid = {uid: n for n, uid in users.items()}
+    records = defaultdict(list)          # configured name -> [employee]
+    for e in sorted(found, key=lambda e: e["id"]):
+        uid = e["user_id"][0] if e["user_id"] else None
+        name = name_of_uid.get(uid) or (e["name"] if e["name"] in names else None)
+        if name:
+            records[name].append(e)
+    hours = _hours_by_employee(
+        kw, [e["id"] for recs in records.values() if len(recs) > 1 for e in recs])
+    out, employees, multiple = [], {}, {}
     for name in names:
-        if name in users and name in employees:
-            out.append((users[name], employees[name]["id"], name))
-    return out, employees, duplicated
+        if name not in users or not records.get(name):
+            continue
+        recs = records[name]
+        employees[name] = primary_employee(recs, name, hours)
+        out.append((users[name], [e["id"] for e in recs], name))
+        if len(recs) > 1:
+            multiple[name] = recs
+    return out, employees, multiple
+
+
+def _hours_by_employee(kw, emp_ids, days=365):
+    """{employee_id: hours logged over the last `days`} — only asked for the
+    developers holding several records, to pick the one they work on."""
+    if not emp_ids:
+        return {}
+    since = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    groups = kw("account.analytic.line", "read_group",
+                [[["employee_id", "in", emp_ids], ["date", ">=", since]],
+                 ["unit_amount:sum"], ["employee_id"]], {"lazy": False})
+    return {g["employee_id"][0]: g["unit_amount"] for g in groups if g["employee_id"]}
+
+
+def primary_employee(records, name, hours):
+    """The record booked on the most, then one with a calendar, then the one
+    carrying the configured name, then the oldest."""
+    return sorted(records, key=lambda e: (-hours.get(e["id"], 0.0),
+                                          0 if e["resource_calendar_id"] else 1,
+                                          0 if e["name"] == name else 1,
+                                          e["id"]))[0]
+
+
+def employee_ids(devs):
+    """Every employee id of the selected developers, flattened."""
+    return [eid for _uid, eids, _name in devs for eid in eids]
+
+
+def employee_owner(devs):
+    """{employee_id: configured developer name} — how a timesheet line or a
+    slot booked on `David Andrian (BE)` is counted for David Andrian."""
+    return {eid: name for _uid, eids, name in devs for eid in eids}
 
 
 def fetch_schedules(kw, cfg, employees):
@@ -243,7 +295,7 @@ def detect_pattern(weekday_hours, schedule):
 
 # --- data --------------------------------------------------------------------
 
-def fetch_actuals(kw, cfg, emp_ids, date_from, date_to, detect_span):
+def fetch_actuals(kw, cfg, emp_ids, date_from, date_to, detect_span, owner=None):
     """Timesheet lines bucketed by week, project, and weekday.
 
     Leave lines are split out rather than dropped: they are what turns a
@@ -271,7 +323,7 @@ def fetch_actuals(kw, cfg, emp_ids, date_from, date_to, detect_span):
     for line in lines:
         if not line["employee_id"]:
             continue
-        name = line["employee_id"][1]
+        name = _owner_name(line["employee_id"], owner)
         date = datetime.date.fromisoformat(line["date"])
         week = week_of(date)
         pid = line["project_id"][0] if line["project_id"] else 0
@@ -287,7 +339,13 @@ def fetch_actuals(kw, cfg, emp_ids, date_from, date_to, detect_span):
     return leave, leave_todate, actual, weekday, len(lines)
 
 
-def fetch_plan(kw, emp_ids, date_from, date_to):
+def _owner_name(employee, owner):
+    """The developer a line or slot belongs to: the configured name through
+    `owner` ({employee_id: name}), else the employee record's own name."""
+    return (owner or {}).get(employee[0], employee[1])
+
+
+def fetch_plan(kw, emp_ids, date_from, date_to, owner=None):
     """Allocation slots bucketed by week. `state` is ignored on purpose: all 374
     slots in this database are `draft`, so filtering on it returns nothing."""
     slots = kw("project.allocation.slot", "search_read",
@@ -301,7 +359,7 @@ def fetch_plan(kw, emp_ids, date_from, date_to):
     for s in slots:
         if not s["employee_id"]:
             continue
-        name = s["employee_id"][1]
+        name = _owner_name(s["employee_id"], owner)
         week = week_of(datetime.date.fromisoformat(s["date"]))
         pid = s["project_id"][0] if s["project_id"] else 0
         planned[(name, week, pid)] += s["days"]
@@ -362,7 +420,7 @@ def gather(kw, cfg, today, weeks_back=4, weeks_fwd=4, needle=None):
     devs, employees, duplicated = select_devs(kw, cfg, needle)
     if not devs:
         sys.exit("Aucun développeur trouvé dans Odoo.")
-    emp_ids = [d[1] for d in devs]
+    emp_ids, owner = employee_ids(devs), employee_owner(devs)
     user_ids = [d[0] for d in devs]
     schedules = fetch_schedules(kw, cfg, employees)
 
@@ -372,8 +430,8 @@ def gather(kw, cfg, today, weeks_back=4, weeks_fwd=4, needle=None):
     date_from = min(datetime.date.fromisoformat(past[0]), detect_from)
     date_to = datetime.date.fromisoformat(future[-1]) + datetime.timedelta(days=6)
     leave, leave_todate, actual, weekday, n_lines = fetch_actuals(
-        kw, cfg, emp_ids, date_from, date_to, (detect_from, today))
-    planned, dev_days, _roles, n_slots = fetch_plan(kw, emp_ids, date_from, date_to)
+        kw, cfg, emp_ids, date_from, date_to, (detect_from, today), owner)
+    planned, dev_days, _roles, n_slots = fetch_plan(kw, emp_ids, date_from, date_to, owner)
     backlog, n_tasks = fetch_backlog(kw, cfg, user_ids)
     projects = fetch_project_names(
         kw, {pid for (_n, _w, pid) in actual} | {pid for (_n, _w, pid) in planned}
@@ -381,9 +439,10 @@ def gather(kw, cfg, today, weeks_back=4, weeks_fwd=4, needle=None):
 
     notes = []
     for name in sorted(duplicated):
-        notes.append(f"⚠️ **{name}** — plusieurs fiches `hr.employee` ; les heures "
-                     f"ne sont lues que sur #{employees[name]['id']}, un second "
-                     "contrat ou une seconde société manquerait donc.")
+        others = ", ".join(e["name"] for e in duplicated[name])
+        notes.append(f"ℹ️ **{name}** — plusieurs fiches `hr.employee` ({others}) : "
+                     "heures et allocations additionnées ; calendrier lu sur "
+                     f"« {employees[name]['name']} », la fiche la plus pointée.")
     missing = [n for n in (cfg["dev_names"] if not needle else [])
                if n not in {d[2] for d in devs}]
     if missing:

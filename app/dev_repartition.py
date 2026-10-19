@@ -36,58 +36,40 @@ from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dev_capacity_report as cap  # noqa: E402
+import dev_periods as periods  # noqa: E402
 import dev_plan_scope  # noqa: E402
 
-# key -> label, in the order of the selector.
-PERIODS = [("week", "Cette semaine"), ("last_week", "Semaine dernière"),
-           ("month", "Ce mois"), ("last_month", "Mois dernier"),
-           ("year", "Cette année"), ("all", "Depuis toujours")]
-PERIOD_KEYS = [k for k, _l in PERIODS]
+# The periods this block offers, in the order of the picker.
+PERIOD_KEYS = ["week", "last_week", "month", "last_month", "quarter",
+               "last_quarter", "year", "last_year", "all"]
+PERIODS = periods.choices(PERIOD_KEYS)
 DEFAULT_PERIOD = "month"
-# "Depuis toujours" still needs a floor for the queries; nobody here logged
-# time in Odoo before it.
-EPOCH = datetime.date(2015, 1, 1)
 
 
-def period_range(key, today):
-    """(first day, last day) — both included."""
-    monday = today - datetime.timedelta(days=today.weekday())
-    first_of_month = today.replace(day=1)
-    if key == "week":
-        return monday, today
-    if key == "last_week":
-        return monday - datetime.timedelta(days=7), monday - datetime.timedelta(days=1)
-    if key == "month":
-        return first_of_month, today
-    if key == "last_month":
-        end = first_of_month - datetime.timedelta(days=1)
-        return end.replace(day=1), end
-    if key == "year":
-        return today.replace(month=1, day=1), today
-    return EPOCH, today
-
-
-def _first_dates(kw, emp_ids):
-    """{employee_id: date of their first timesheet line}."""
+def _first_dates(kw, devs):
+    """{developer name: date of their first timesheet line, on any of their
+    employee records}."""
     out = {}
-    for eid in emp_ids:
+    for _uid, eids, name in devs:
         rows = kw("account.analytic.line", "search_read",
-                  [[["employee_id", "=", eid]]],
+                  [[["employee_id", "in", eids]]],
                   {"fields": ["date"], "order": "date asc", "limit": 1})
         if rows:
-            out[eid] = datetime.date.fromisoformat(rows[0]["date"])
+            out[name] = datetime.date.fromisoformat(rows[0]["date"])
     return out
 
 
 def gather(kw, cfg, today, period):
-    start, end = period_range(period, today)
+    start, end = periods.period_range(period, today)
     devs, employees, _dup = cap.select_devs(kw, cfg, None)
     if not devs:
         sys.exit("Aucun développeur trouvé dans Odoo.")
-    emp_ids = [eid for _u, eid, _n in devs]
+    # Every employee record of each developer, lines summed under their
+    # configured name (`cap.select_devs`).
+    emp_ids, owner = cap.employee_ids(devs), cap.employee_owner(devs)
     schedules = cap.fetch_schedules(kw, cfg, employees)
     leave_ids = list(cfg.get("leave_project_ids") or [])
-    first = _first_dates(kw, emp_ids)
+    first = _first_dates(kw, devs)
     if period == "all" and first:
         start = min(first.values())
 
@@ -100,22 +82,22 @@ def gather(kw, cfg, today, period):
                             [span, ["unit_amount:sum"], ["employee_id", "project_id"]],
                             {"lazy": False})
               if not (g["project_id"] and g["project_id"][0] in leave_ids)]
-    leave = defaultdict(float)     # (employee_id, date) -> h
+    leave = defaultdict(float)     # (name, date) -> h
     if leave_ids:
         for line in kw("account.analytic.line", "search_read",
                        [span + [["project_id", "in", leave_ids]]],
                        {"fields": ["employee_id", "date", "unit_amount"]}):
             if line["employee_id"]:
-                leave[(line["employee_id"][0],
+                leave[(owner.get(line["employee_id"][0]),
                        datetime.date.fromisoformat(line["date"]))] += line["unit_amount"]
 
-    planned, _dd, _roles, _n = cap.fetch_plan(kw, emp_ids, start, end)
+    planned, _dd, _roles, _n = cap.fetch_plan(kw, emp_ids, start, end, owner)
     scope = dev_plan_scope.Scope(
         {pid for (_n, _w, pid), d in planned.items() if pid and d > 0}, cfg)
     pids = {g["project_id"][0] for g in logged if g["project_id"]}
     projects = cap.fetch_project_names(kw, pids)
 
-    split = defaultdict(lambda: defaultdict(float))   # employee_id -> kind -> h
+    split = defaultdict(lambda: defaultdict(float))   # name -> kind -> h
     for g in logged:
         if not g["employee_id"]:
             continue
@@ -125,11 +107,11 @@ def gather(kw, cfg, today, period):
             kind = "plan"
         else:
             kind = "quick" if (pid and client) else "internal"
-        split[g["employee_id"][0]][kind] += g["unit_amount"]
+        split[owner.get(g["employee_id"][0])][kind] += g["unit_amount"]
     rows, team = [], defaultdict(float)
-    for _uid, eid, name in devs:
+    for _uid, _eids, name in devs:
         hours = schedules[name]["hours"]
-        dev_start = max(start, first.get(eid, end + datetime.timedelta(days=1)))
+        dev_start = max(start, first.get(name, end + datetime.timedelta(days=1)))
         # `capacity` is the full calendar; leave is a segment of it, capped at
         # the day's own hours (a half day off on a 4 h day is not 8 h off).
         capacity = off = 0.0
@@ -137,9 +119,9 @@ def gather(kw, cfg, today, period):
         while day <= end:
             gross = hours.get(day.weekday(), 0.0)
             capacity += gross
-            off += min(leave[(eid, day)], gross)
+            off += min(leave[(name, day)], gross)
             day += datetime.timedelta(days=1)
-        s = split[eid]
+        s = split[name]
         worked = s["plan"] + s["quick"] + s["internal"]
         # Not yet in Odoo during the period: no row. On leave all along: a row
         # that says so, rather than a developer silently missing.

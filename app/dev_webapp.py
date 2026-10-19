@@ -40,6 +40,7 @@ import dev_capacite_view  # noqa: E402
 import dev_delais_view  # noqa: E402
 import dev_stats_report  # noqa: E402
 import dev_capacity_report  # noqa: E402
+import dev_periods  # noqa: E402
 import dev_quickstart_report  # noqa: E402
 import dev_repartition  # noqa: E402
 import dev_tasks_report  # noqa: E402
@@ -127,29 +128,37 @@ def _run(loader):
 native = NativeCache()
 
 
-WINDOWS = {"year": None, "90": 90, "180": 180, "365": 365}
+# The periods each tab's picker offers (`dev_periods` keys): calendar ones
+# first, then rolling ones. Tab 3 only takes periods that run to today — the
+# billable rate and the sheet coverage are measured up to now.
+TEMPS_PERIODS = ["month", "quarter", "year", "90d", "180d", "365d"]
 RECENTS = {"30": 30, "60": 60, "90": 90}
+# Tab 4 reads tickets by creation date: a short calendar period ("cette
+# semaine") would only hold the tickets already through, i.e. the fastest.
+DELAIS_PERIODS = ["quarter", "year", "30d", "90d", "180d", "365d"]
 
 
 def render_temps(request):
     """Tab 3, native: filters from the query string, data from the cache."""
-    q = {"window": request.query_params.get("window", "year"),
-         "recent": request.query_params.get("recent", str(dev_timesheet_report.RECENT_WINDOW)),
+    recent_default = str(dev_timesheet_report.RECENT_WINDOW)
+    q = {"window": dev_periods.from_legacy(request.query_params.get("window"),
+                                          TEMPS_PERIODS, "year"),
+         "recent": request.query_params.get("recent", recent_default),
          "dev": request.query_params.get("dev", "")}
-    if q["window"] not in WINDOWS:
-        q["window"] = "year"
     if q["recent"] not in RECENTS:
-        q["recent"] = str(dev_timesheet_report.RECENT_WINDOW)
-    days, recent = WINDOWS[q["window"]], RECENTS[q["recent"]]
-    ctx = native.get(("temps", days, recent), _load_temps(days, recent))
+        q["recent"] = recent_default
+    recent = RECENTS[q["recent"]]
+    ctx = native.get(("temps", q["window"], recent), _load_temps(q["window"], recent))
     vm = dev_timesheet_view.build(ctx, digest_config.load(),
                                   [q["dev"]] if q["dev"] else None)
-    return templates.get_template("temps.html").render(q=q, **vm)
+    return templates.get_template("temps.html").render(
+        q=q, periods=dev_periods.choices(TEMPS_PERIODS),
+        recents=[(k, f"{k} jours") for k in RECENTS], **vm)
 
 
-def _load_temps(days, recent):
+def _load_temps(period, recent):
     return lambda kw, cfg, today: dev_timesheet_report.gather(
-        kw, cfg, today, days, recent)
+        kw, cfg, today, None, recent, period=period)
 
 
 def _load_capacite(back, fwd):
@@ -158,8 +167,19 @@ def _load_capacite(back, fwd):
         dev_capacity_report.gather(kw, cfg, today, back, fwd))
 
 
-def _load_delais(days, scope):
-    return lambda kw, cfg, today: dev_stats_report.gather(kw, cfg, today, days, scope)
+def _load_delais(period, scope):
+    """A rolling period is a day count; a calendar one, its first day — both
+    worked out at load time, so a cached "Cette année" follows the date."""
+    def load(kw, cfg, today):
+        days = dev_periods.rolling_days(period)
+        since = None if days else dev_periods.period_range(period, today)[0]
+        return dev_stats_report.gather(kw, cfg, today, days, scope, since=since)
+    return load
+
+
+def _default_delais():
+    days = digest_config.load().get("stats_window_days", 90)
+    return f"{days}d" if f"{days}d" in DELAIS_PERIODS else "90d"
 
 
 def _load_travail(kw, cfg, today):
@@ -194,24 +214,22 @@ def render_capacite(request):
     qctx, cctx = native.get(("capacite", back, fwd), _load_capacite(back, fwd))
     vm = dev_capacite_view.build(qctx, cctx, digest_config.load(),
                                  [q["dev"]] if q["dev"] else None)
-    return templates.get_template("capacite.html").render(q=q, **vm)
-
-
-DAYS = {"30": 30, "90": 90, "180": 180, "365": 365}
+    return templates.get_template("capacite.html").render(
+        q=q, backs=[(k, f"{k} sem.") for k in BACKS],
+        fwds=[(k, f"{k} sem.") for k in FWDS], **vm)
 
 
 def render_delais(request):
     """Tab 4. The 📌/⚡ scope is tab 1's — the static tab passes the
     quickstart context's scope too — fetched first, outside the delays loader:
     the cache lock is not re-entrant."""
-    default = str(digest_config.load().get("stats_window_days", 90))
-    q = {"days": request.query_params.get("days", default)}
-    q["days"] = q["days"] if q["days"] in DAYS else default
-    days = DAYS.get(q["days"], 90)
+    q = {"days": dev_periods.from_legacy(request.query_params.get("days"),
+                                        DELAIS_PERIODS, _default_delais())}
     scope = native.get(("travail",), _load_travail)[0]["scope"]
-    ctx = native.get(("delais", days), _load_delais(days, scope))
+    ctx = native.get(("delais", q["days"]), _load_delais(q["days"], scope))
     vm = dev_delais_view.build(ctx, digest_config.load())
-    return templates.get_template("delais.html").render(q=q, **vm)
+    return templates.get_template("delais.html").render(
+        q=q, periods=dev_periods.choices(DELAIS_PERIODS), **vm)
 
 
 def _load_repartition(period):
@@ -241,14 +259,14 @@ def default_items():
     Tab 4 reuses tab 1's 📌/⚡ scope, as the static tab did."""
     cfg = digest_config.load()
     travail = _run(_load_travail)
-    days = int(cfg.get("stats_window_days", 90))
+    delais = _default_delais()
     fwd = dev_quickstart_report.WEEKS_FWD
     return {
         ("travail",): travail,
         ("capacite", 4, fwd): _run(_load_capacite(4, fwd)),
-        ("temps", None, dev_timesheet_report.RECENT_WINDOW):
-            _run(_load_temps(None, dev_timesheet_report.RECENT_WINDOW)),
-        ("delais", days): _run(_load_delais(days, travail[0]["scope"])),
+        ("temps", "year", dev_timesheet_report.RECENT_WINDOW):
+            _run(_load_temps("year", dev_timesheet_report.RECENT_WINDOW)),
+        ("delais", delais): _run(_load_delais(delais, travail[0]["scope"])),
         ("repartition", dev_repartition.DEFAULT_PERIOD):
             _run(_load_repartition(dev_repartition.DEFAULT_PERIOD)),
     }

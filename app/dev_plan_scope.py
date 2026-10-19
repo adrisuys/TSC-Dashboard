@@ -111,11 +111,12 @@ def build(kw, cfg, employee_ids=None, today=None):
 
 
 def employee_ids_of(kw, cfg):
-    """Employee ids of the configured developers. First record wins on a name
-    duplicated across companies, as in the capacity report."""
-    found = kw("hr.employee", "search_read", [[["name", "in", cfg["dev_names"]]]],
+    """Every employee id of the configured developers — all their records,
+    found through their user as in the capacity report: a slot booked on
+    `David Andrian (BE)` makes its project planned as surely as one booked on
+    `David Andrian`."""
+    users = kw("res.users", "search_read", [[["name", "in", cfg["dev_names"]]]],
                {"fields": ["name"]})
-    by_name = {}
-    for emp in found:
-        by_name.setdefault(emp["name"], emp["id"])
-    return [by_name[n] for n in cfg["dev_names"] if n in by_name]
+    return kw("hr.employee", "search",
+              [["|", ["user_id", "in", [u["id"] for u in users]],
+                ["name", "in", cfg["dev_names"]]]])

@@ -50,6 +50,7 @@ from urllib.parse import urlencode
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dev_capacity_report as cap  # noqa: E402
+import dev_periods as periods  # noqa: E402
 import digest  # noqa: E402
 import digest_config  # noqa: E402
 import md_to_html  # noqa: E402
@@ -324,15 +325,28 @@ def grid_dates(schedules, today, weeks=GRID_WEEKS):
     return out
 
 
-def gather(kw, cfg, today, days=None, recent_days=RECENT_WINDOW, needle=None):
+def gather(kw, cfg, today, days=None, recent_days=RECENT_WINDOW, needle=None,
+           period=None):
+    """`period` — a `dev_periods` key running to today ("month", "quarter",
+    "year", "90d"…) — replaces `days` when given; the web app's picker
+    passes it. "year" is the default year-to-date window, recent one included."""
     devs, missing = resolve_devs(kw, cfg, needle)
     leave_ids = set(cfg.get("leave_project_ids") or [])
-    window_from, window_label, window_de = window_bounds(today, days)
+    if period == "year":
+        period = None
+    if period:
+        window_from = periods.period_range(period, today)[0]
+        window_label, window_de = periods.window_text(period, today)
+    else:
+        window_from, window_label, window_de = window_bounds(today, days)
+    # Only the default year to date carries the recent window and the
+    # year-end projection. (Not `not days`: "Ce mois" on the 1st is 0 days.)
+    is_year = not (days or period)
     # The recent window rides alongside the year, never alongside an explicit
     # `--days`: two rolling windows on one table is a puzzle, not a report.
     # It is deliberately not clamped to 1 January — in February the current
     # picture legitimately reaches back into December.
-    recent_from = (None if days else
+    recent_from = (None if not is_year else
                    today - datetime.timedelta(days=recent_days))
     # One query covers whichever reaches furthest back — the billable window,
     # the recent one, or the fill grid. Early in January the grid is the widest.
@@ -455,7 +469,7 @@ def gather(kw, cfg, today, days=None, recent_days=RECENT_WINDOW, needle=None):
             "recent_days": recent_days, "has_recent": bool(recent_from),
             "window_label": window_label, "window_de": window_de,
             "window_from": window_from,
-            "is_year": not days,
+            "is_year": is_year,
             "n_lines": len(lines), "hours_by_emp": hours_by_emp}
 
 

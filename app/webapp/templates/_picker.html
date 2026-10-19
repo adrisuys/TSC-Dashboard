@@ -1,0 +1,15 @@
+{# The one period / window picker, used on every tab: a row of pills, each a
+   radio. Inside a filter form with hx-trigger="change", picking one submits
+   the form like any select would; the pill turns on at once, before the
+   server answers. `options` is [(value, label)] — dev_periods.choices() for
+   periods. #}
+{% macro picker(name, options, current, legend) %}
+<fieldset class="picker">
+  <legend>{{ legend }}</legend>
+  <div class="pills">
+    {% for value, label in options %}
+    <label><input type="radio" name="{{ name }}" value="{{ value }}" {{ 'checked' if value == current }}><span>{{ label }}</span></label>
+    {% endfor %}
+  </div>
+</fieldset>
+{% endmacro %}

@@ -1,16 +1,13 @@
 {# Tab 2, native. Data from dev_capacite_view.build(). #}
 {% macro hrs(v, signed=false) %}{% if signed %}{{ '+' if v >= 0 else '−' }}{{ '%.0f' % (v | abs) }} h{% else %}{{ '%.0f' % v }} h{% endif %}{% endmacro %}
 {% macro occbadge(band, avg, gap, partial=false) %}{% if gap %}<span class="badge warn" data-tip="Non mesurable : moins de {{ '%.0f' % gap_pct }} % de la capacité pointée, sans absence qui l'explique"><i></i>non mesurable</span>{% elif avg is none %}<span class="muted">—</span>{% else %}<span class="badge {{ band }}"><i></i>{{ '%.0f' % avg }} %{{ ' (partiel)' if partial }}</span>{% endif %}{% endmacro %}
+{% from "_picker.html" import picker %}
 {% set k = kpi %}
 
 <form class="filters" hx-get="/capacite" hx-target="#pane" hx-push-url="true"
       hx-trigger="change" hx-indicator="#pane">
-  <label>Historique
-    <select name="back">{% for w in (4, 8, 12) %}<option value="{{ w }}" {{ 'selected' if q.back == w|string }}>{{ w }} semaines</option>{% endfor %}</select>
-  </label>
-  <label>À venir
-    <select name="fwd">{% for w in (4, 5, 8) %}<option value="{{ w }}" {{ 'selected' if q.fwd == w|string }}>{{ w }} semaines</option>{% endfor %}</select>
-  </label>
+  {{ picker("back", backs, q.back, "Historique") }}
+  {{ picker("fwd", fwds, q.fwd, "À venir") }}
   <label>Développeur
     <select name="dev">
       <option value="">Toute l'équipe</option>

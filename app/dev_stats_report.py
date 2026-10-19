@@ -491,13 +491,17 @@ def build(argv=None, kw=None, cfg=None, scope=None, today=None, full=True,
     return args
 
 
-def gather(kw, cfg, today, days=None, scope=None):
+def gather(kw, cfg, today, days=None, scope=None, since=None):
     """Every input of the report, in one dict — lifted out of build() so the
     web app lays the same delays out natively. The person breakdown, the
     weekly trend and the waiting lists are `by_person`, `tendance_data` and
-    `waiting`, shared by both pages."""
-    window_days = days or cfg.get("stats_window_days", 90)
-    since = today - datetime.timedelta(days=window_days)
+    `waiting`, shared by both pages. `since` — a calendar period's first day,
+    from the web app's picker — replaces `days` when given."""
+    if since is not None:
+        window_days = (today - since).days
+    else:
+        window_days = days or cfg.get("stats_window_days", 90)
+        since = today - datetime.timedelta(days=window_days)
     tag_id = workload.resolve_tag(kw, cfg)
     stages = stage_ids(kw, [SPEC_STAGE, TODO_STAGE])
     spec_ids, todo_ids = stages[SPEC_STAGE], stages[TODO_STAGE]

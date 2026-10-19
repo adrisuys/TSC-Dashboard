@@ -1,5 +1,6 @@
 {# "Répartition du temps" — its own block, swapped alone when the period
    changes. Data from dev_repartition.view(). #}
+{% from "_picker.html" import picker %}
 {% macro h(v) %}{{ '%.0f' % v }} h{% endmacro %}
 {% macro pc(v) %}{% if v is not none %}{{ '%.0f' % v }} %{% endif %}{% endmacro %}
 {% macro p(v) %}{% if v is not none %} · {{ '%.0f' % v }} %{% endif %}{% endmacro %}
@@ -21,13 +22,11 @@
     <h2>Répartition du temps <span class="muted">— {{ span }}</span></h2>
     <div class="legend"><span><i class="sw plan"></i>planifié</span><span><i class="sw billable"></i>quickstart</span><span><i class="sw internal"></i>interne</span><span><i class="sw leave"></i>congé</span><span><i class="sw unlogged"></i>non pointé</span></div>
   </header>
-  <div class="rep-period" role="group" aria-label="Période">
-    {% for key, label in periods %}
-      <button type="button" aria-pressed="{{ 'true' if key == period else 'false' }}"
-              hx-get="/repartition?period={{ key }}{% if dev %}&dev={{ dev | urlencode }}{% endif %}"
-              hx-target="#repartition" hx-swap="outerHTML">{{ label }}</button>
-    {% endfor %}
-  </div>
+  <form class="rep-period" hx-get="/repartition" hx-trigger="change"
+        hx-target="#repartition" hx-swap="outerHTML">
+    {% if dev %}<input type="hidden" name="dev" value="{{ dev }}">{% endif %}
+    {{ picker("period", periods, period, "Période") }}
+  </form>
   <details class="help"><summary>Comment lire</summary>
     <p>La barre fait 100 % du <b>calendrier</b> du développeur sur la période (ses jours et heures propres), et chaque segment est du temps <b>réellement pointé</b>, jamais du temps assigné : quelqu'un alloué 3 jours par semaine sur un projet planifié qui en a presté 2 en montre 2.</p>
     <p><b>Planifié</b> = heures pointées sur un projet qui a au moins un créneau d'allocation sur la période. <b>Quickstart</b> = heures pointées sur tout autre projet client. <b>Interne</b> = projets sans client (ou sans projet). <b>Congé</b> = congés et fériés pointés. <b>Non pointé</b> = calendrier − tout le reste.</p>

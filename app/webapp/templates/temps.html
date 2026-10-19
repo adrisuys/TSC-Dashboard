@@ -15,27 +15,13 @@
      data-tip="{{ s.label }} · {{ '%.1f' % s.hours }} h · {{ '%.0f' % s.pct }} %"></span>{% endfor %}</span>
 {% endmacro %}
 
+{% from "_picker.html" import picker %}
 {% set f = facturable %}{% set t = f.team %}
 
 <form class="filters" hx-get="/temps" hx-target="#pane" hx-push-url="true"
       hx-trigger="change" hx-indicator="#pane">
-  <label>Période
-    <select name="window">
-      <option value="year" {{ 'selected' if q.window == 'year' }}>Année civile</option>
-      {% for d in (90, 180, 365) %}
-      <option value="{{ d }}" {{ 'selected' if q.window == d|string }}>{{ d }} derniers jours</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% if is_year %}
-  <label>Fenêtre récente
-    <select name="recent">
-      {% for d in (30, 60, 90) %}
-      <option value="{{ d }}" {{ 'selected' if q.recent == d|string }}>{{ d }} jours</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% endif %}
+  {{ picker("window", periods, q.window, "Période") }}
+  {% if is_year %}{{ picker("recent", recents, q.recent, "Fenêtre récente") }}{% endif %}
   <label>Développeur
     <select name="dev">
       <option value="">Toute l'équipe</option>

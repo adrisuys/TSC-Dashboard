@@ -342,7 +342,7 @@ def gather(kw, cfg, today, weeks_fwd=WEEKS_FWD, needle=None, data=None):
     devs, employees, duplicated = cap.select_devs(kw, cfg, needle)
     if not devs:
         sys.exit("Aucun développeur trouvé dans Odoo.")
-    emp_ids = [d[1] for d in devs]
+    emp_ids, owner = cap.employee_ids(devs), cap.employee_owner(devs)
     schedules = cap.fetch_schedules(kw, cfg, employees)
 
     date_from = current
@@ -350,8 +350,8 @@ def gather(kw, cfg, today, weeks_fwd=WEEKS_FWD, needle=None, data=None):
     # Le détecteur de régime n'a pas sa place ici : il vit dans /dev-capacity,
     # d'où une fenêtre de détection réduite à rien.
     leave, _todate, actual, _weekday, _n = cap.fetch_actuals(
-        kw, cfg, emp_ids, date_from, date_to, (today, today))
-    planned, _dev_days, _roles, n_slots = cap.fetch_plan(kw, emp_ids, date_from, date_to)
+        kw, cfg, emp_ids, date_from, date_to, (today, today), owner)
+    planned, _dev_days, _roles, n_slots = cap.fetch_plan(kw, emp_ids, date_from, date_to, owner)
     # Le plan sert deux fois : à chiffrer les semaines, et à classer les projets.
     # Un seul créneau de plus de 0 jour suffit à faire d'un projet un projet
     # planifié — c'est ce qui fait que European Schools n'est plus un cas

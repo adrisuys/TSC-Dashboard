@@ -3,11 +3,10 @@
 {% macro dur(s) %}{% if s is none %}<span class="muted">—</span>{% else %}{{ '%.1f' % (s / 3600) }} h <span class="unit">({{ '%.1f' % (s / 86400) }} j)</span>{% endif %}{% endmacro %}
 {% macro proj(p) %}{% if p.planned is none %}<span class="muted">—</span>{% else %}<span data-tip="{{ 'Planifié' if p.planned else 'Quickstart' }}">{{ '📌' if p.planned else '⚡' }}</span> {{ p.name }}{% endif %}{% endmacro %}
 
+{% from "_picker.html" import picker %}
 <form class="filters" hx-get="/delais" hx-target="#pane" hx-push-url="true"
       hx-trigger="change" hx-indicator="#pane">
-  <label>Tickets créés sur
-    <select name="days">{% for d in (30, 90, 180, 365) %}<option value="{{ d }}" {{ 'selected' if q.days == d|string }}>{{ d }} derniers jours</option>{% endfor %}</select>
-  </label>
+  {{ picker("days", periods, q.days, "Tickets créés sur") }}
   <span class="filters-meta">{{ n_tasks }} tickets lus · {{ since }} → {{ today }} (création) · délais {{ 'en heures ouvrées' if stored else 'calendaires' }}</span>
 </form>
 
