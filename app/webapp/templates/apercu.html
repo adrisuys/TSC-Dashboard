@@ -1,0 +1,61 @@
+{# Tab 0, "Vue d'ensemble". Data from dev_apercu_view.build(): six cards, one
+   per question, each a status, a headline figure and a few pain points, with
+   a link to the tab that holds the detail. #}
+{% macro go(href, text) %}<a href="{{ href }}" hx-get="{{ href.split('#')[0] }}" hx-target="#pane" hx-push-url="{{ href }}" class="ov-more">{{ text }} →</a>{% endmacro %}
+{% set state_label = {"ok": "RAS", "warn": "à surveiller", "err": "à traiter"} %}
+
+<div class="ov-grid">
+{% for c in cards %}
+  <article class="card ov-card is-{{ c.state }}" id="ov-{{ c.key }}">
+    <header class="ov-head">
+      <h2>{{ loop.index }}. {{ c.title }}</h2>
+      <span class="badge {{ c.state }}"><i></i>{{ state_label[c.state] }}</span>
+    </header>
+    <div class="ov-value is-{{ c.state }}">{{ c.value }}</div>
+    <div class="kpi-sub">{{ c.sub }}</div>
+    <p class="ov-lead">{{ c.lead }}</p>
+
+    {% if c.people %}
+    <ul class="ov-people">
+      {% for p in c.people %}
+      <li><span class="name">{{ p.name }}</span>
+        {% if p.mark is defined %}<span class="meter"><span class="fill {{ p.state }}" style="width: {{ p.pct }}%"></span><span class="mark" style="left: {{ p.mark }}%"></span></span>
+        {% elif p.pct is defined %}<span class="leftbar"><span style="width: {{ p.pct }}%"></span></span>{% endif %}
+        <b class="is-{{ p.state }}">{{ p.value }}</b></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if c.grid %}
+    <table class="compact ov-ahead">
+      <thead><tr><th></th>{% for l in c.grid.labels %}<th class="num">{{ l }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for r in c.grid.rows %}<tr><td>{{ r.name }}</td>
+        {% for cell in r.cells %}<td class="num">{% if r.pool %}<span class="muted">renfort</span>{% else %}<span class="free {{ 'ok' if cell.free >= 1 else 'none' }}" data-tip="{{ '%.1f' % cell.free }} j libres sur {{ '%.1f' % cell.available }}">{{ '%.1f' % cell.free if cell.free >= 0.05 else '—' }}</span>{% endif %}</td>{% endfor %}
+      </tr>{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    {% if c["items"] %}
+    <ul class="ov-items">
+      {% for it in c["items"] %}
+      <li class="{{ 'muted' if it.muted }}{{ ' is-err' if it.err }}{{ ' is-warn' if it.warn }}">
+        {% if it.url %}<a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.text }}</a>{% else %}{{ it.text }}{% endif %}
+        {% if it.meta %}<span class="muted"> · {{ it.meta }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <footer>{{ go(c.href, "Détail") }}</footer>
+  </article>
+{% endfor %}
+</div>
+
+{% if fixes %}
+<section class="block ov-fixes">
+  <header class="block-head"><h2>Données à corriger</h2></header>
+  <ul class="notes">
+    {% for f in fixes %}
+    <li class="warn">{% if f.html %}{{ f.html | safe }}{% elif f.url %}<a href="{{ f.url }}" class="lines-link">{{ f.text }}</a>{% else %}{{ f.text }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

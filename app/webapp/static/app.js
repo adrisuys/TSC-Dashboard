@@ -58,6 +58,11 @@
   document.addEventListener('htmx:afterSwap', function (e) {
     if (e.detail.target.id === 'pane') window.scrollTo(0, 0);
   });
+  // ...unless the link aimed at a section (an overview card's "Détail →"
+  // pushes /temps#tenue): once the URL is pushed, go there.
+  document.addEventListener('htmx:afterSettle', function (e) {
+    if (e.detail.target.id === 'pane' && location.hash) setTimeout(reveal, 0);
+  });
 })();
 
 // One tooltip for anything carrying data-tip: grid cells, stacked-bar

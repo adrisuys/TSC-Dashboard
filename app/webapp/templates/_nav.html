@@ -2,12 +2,12 @@
    the same links become an iOS-style tab bar pinned to the bottom (app.css),
    with an icon and a short label each. #}
 {% set icons = {
+  "apercu": '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
   "travail": '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.2 1.2L7 4.8M3.5 12l1.2 1.2L7 10.8M3.5 18l1.2 1.2L7 16.8"/>',
   "capacite": '<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5.2 6-5.2s5.4 1.9 6 5.2"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.4c2.4.2 4 1.9 4.5 4.6"/>',
   "temps": '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-  "delais": '<path d="M7 3.5h10M7 20.5h10"/><path d="M8 3.5c0 4 4 5.5 4 8.5s-4 4.5-4 8.5M16 3.5c0 4-4 5.5-4 8.5s4 4.5 4 8.5"/>',
 } %}
-{% set short = {"travail": "Travail", "capacite": "Capacité", "temps": "Temps", "delais": "Délais"} %}
+{% set short = {"apercu": "Aperçu", "travail": "Tickets", "capacite": "Dispo", "temps": "Temps"} %}
 <nav id="tabs" class="tabs" role="tablist"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for key, label in tabs %}
   <a role="tab" href="/{{ key }}" hx-get="/{{ key }}" hx-target="#pane"

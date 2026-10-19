@@ -1,5 +1,6 @@
-{# Tab 3, native. Data from dev_timesheet_view.build(); every figure comes
-   from dev_timesheet_report, so this page and the static one agree. #}
+{# Tab 3, "Facturable & feuilles", native. Data from dev_timesheet_view.build().
+   Two questions, in this order: is everybody up to date on their timesheet,
+   then where we stand against the billable target — team and individuals. #}
 {% macro pct(v, digits=0) %}{% if v is none %}—{% else %}{{ ('%.' ~ digits ~ 'f') % v }} %{% endif %}{% endmacro %}
 {% macro hrs(v) %}{{ '%.1f' % v }} h{% endmacro %}
 {% macro meter(v) %}
@@ -31,6 +32,7 @@
   <span class="filters-meta">{{ window_from }} → {{ today }} · {{ n_lines }} lignes lues</span>
 </form>
 
+
 {# --- KPI row ------------------------------------------------------------ #}
 {% set subject = names[0] if single else "l'équipe" %}
 <div class="kpi-row">
@@ -49,12 +51,6 @@
     <div class="kpi-sub">{% if t.delta is not none %}{{ '%+.1f' % t.delta }} pts vs la moyenne {{ window_de }}{% else %}trop peu d'heures{% endif %}</div>
   </div>
   {% endif %}
-  <div class="card kpi-card">
-    <div class="kpi-label">Hors investissement</div>
-    <div class="kpi-value">{{ pct(t.ex_inv, 1) }}</div>
-    {{ meter(t.ex_inv) }}
-    <div class="kpi-sub">{% if t.invest_cost is not none %}l'invest pèse {{ '%.1f' % t.invest_cost }} pts ({{ hrs(t.invest) }}){% else %}pas d'investissement interne{% endif %}</div>
-  </div>
   <div class="card kpi-card">
     <div class="kpi-label">Couverture des feuilles</div>
     <div class="kpi-value">{{ pct(tenue.team_coverage, 1) }}</div>
@@ -82,7 +78,7 @@
     {% for w in f.watch %}<b>{{ w.name }}</b> ({{ '%.0f' % w.recent }} %, {{ '%+.0f' % w.delta }} pts){{ ', ' if not loop.last }}{% endfor %}.</div>
   {% endif %}
   {% if t.fixed %}
-  <div class="callout">⚠️ <b>{{ hrs(t.misfiled) }}</b> du dénominateur ressemblent à des congés pointés hors du projet Congés — corrigé, le ratio serait de <b>{{ pct(t.fixed, 1) }}</b>. <a href="#temps-conges">Voir le détail</a>.</div>
+  <div class="callout">⚠️ <b>{{ hrs(t.misfiled) }}</b> du dénominateur ressemblent à des congés pointés hors du projet Congés — corrigé, le ratio serait de <b>{{ pct(t.fixed, 1) }}</b>. <a href="{{ conges.all_url }}">Voir les lignes</a>.</div>
   {% endif %}
   {% if f.excluded %}
   <div class="callout">Exclus des totaux, feuille incomplète sur les derniers jours : {{ f.excluded | join(', ') }}.</div>
@@ -90,8 +86,56 @@
 </div>
 {% endif %}
 
-{# --- Facturable ---------------------------------------------------------- #}
-<section class="block">
+{# --- 1. Tenue — first: an incomplete sheet makes every % below wrong --- #}
+{% set te = tenue %}
+<section class="block" id="tenue">
+  <header class="block-head">
+    <h2>Tenue des feuilles</h2>
+    <div class="legend">
+      <span><i class="cell full"></i>pointé</span>
+      <span><i class="cell leave"></i>congé / férié</span>
+      <span><i class="cell empty"></i>trou</span>
+      <span><i class="cell off"></i>non travaillé</span>
+    </div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Une colonne = un jour, la même date sur toutes les lignes ({{ te.span }}). Un jour compte comme pointé dès {{ '%.0f' % gap_pct }} % des heures attendues. Aujourd'hui est exclu.</p>
+    <p><b>Trous</b> = journées non renseignées (la <i>tenue</i>). <b>Couverture</b> = heures pointées ÷ heures attendues, congés retirés des deux côtés (le <i>volume</i>) : quelqu'un qui pointe 6 h chaque jour sur 8 h n'a aucun trou mais 75 % de couverture. Les colonnes « {{ window_label }} » appliquent la même règle sur toute la fenêtre, à partir de la première ligne de chacun.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr>
+      <th>Développeur</th><th>Régime</th>
+      <th>{{ grid_weeks }} dernières semaines<div class="weeks">{% for w in te.week_labels %}<span>{{ w }}</span>{% endfor %}</div></th>
+      <th class="num">Trous</th><th class="num">Couverture</th>
+      <th class="num">Trous ({{ window_label }})</th><th class="num">Couverture ({{ window_label }})</th>
+      <th>Dernier jour</th><th class="num">Retard</th><th class="num">Délai méd.</th><th>État</th>
+    </tr></thead>
+    <tbody>
+    {% for row in te.rows %}
+      <tr>
+        <td class="name">{{ row.name }}</td><td class="nowrap muted">{{ row.regime }}</td>
+        <td><div class="daygrid">{% for week in row.weeks %}<span class="week">{% for d in week %}<span class="cell {{ d.kind }}" data-tip="{{ d.date }} · {{ {'full':'pointé','leave':'congé / férié','empty':'trou','off':'non travaillé'}[d.kind] }}"></span>{% endfor %}</span>{% endfor %}</div></td>
+        <td class="num">{{ row.holes or '—' }}</td>
+        <td class="num" data-tip="{{ '%.1f' % row.worked }} / {{ '%.0f' % row.expected }} h">{{ pct(row.coverage) }}</td>
+        <td class="num">{{ row.y_holes or '—' }}</td>
+        <td class="num" data-tip="{{ '%.1f' % row.y_worked }} / {{ '%.0f' % row.y_expected }} h">{{ pct(row.y_coverage) }}</td>
+        <td class="nowrap">{{ row.last }}</td><td class="num">{{ row.late or '—' }}</td>
+        <td class="num">{% if row.lag is none %}—{% else %}{{ '%.0f' % row.lag }} j{% endif %}</td>
+        <td>{{ badge(row.status, row.status_label) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% set holes = te.rows | selectattr('missing') | list %}
+  {% if holes %}
+  <details class="help"><summary>Jours à rattraper ({{ holes | sum(attribute='holes') }})</summary>
+    <ul class="plain">{% for row in holes %}<li><b>{{ row.name }}</b> — {{ row.missing | join(', ') }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+
+{# --- 2. Facturable ---------------------------------------------------------- #}
+<section class="block" id="facturable">
   <header class="block-head">
     <h2>Facturable vs non facturable</h2>
     <div class="legend">
@@ -143,9 +187,11 @@
   </table></div>
 </section>
 
-{# --- Tendance ------------------------------------------------------------ #}
+{# --- 3. Tendance — folded ------------------------------------------------ #}
 {% set c = tendance.chart %}
 {% if c %}
+<details class="block fold">
+  <summary><h2>Tendance</h2> <span class="muted">— le % facturable {{ 'mois' if tendance.unit == 'mois' else 'semaine' }} par {{ 'mois' if tendance.unit == 'mois' else 'semaine' }}, et le cumul</span></summary>
 <section class="block">
   <header class="block-head">
     <h2>Tendance — {{ tendance.points | length }} {{ tendance.unit }}</h2>
@@ -199,131 +245,7 @@
     </table></div>
   </details>
 </section>
-{% endif %}
-
-{# --- Tenue --------------------------------------------------------------- #}
-{% set te = tenue %}
-<section class="block">
-  <header class="block-head">
-    <h2>Tenue des feuilles</h2>
-    <div class="legend">
-      <span><i class="cell full"></i>pointé</span>
-      <span><i class="cell leave"></i>congé / férié</span>
-      <span><i class="cell empty"></i>trou</span>
-      <span><i class="cell off"></i>non travaillé</span>
-    </div>
-  </header>
-  <details class="help"><summary>Comment lire</summary>
-    <p>Une colonne = un jour, la même date sur toutes les lignes ({{ te.span }}). Un jour compte comme pointé dès {{ '%.0f' % gap_pct }} % des heures attendues. Aujourd'hui est exclu.</p>
-    <p><b>Trous</b> = journées non renseignées (la <i>tenue</i>). <b>Couverture</b> = heures pointées ÷ heures attendues, congés retirés des deux côtés (le <i>volume</i>) : quelqu'un qui pointe 6 h chaque jour sur 8 h n'a aucun trou mais 75 % de couverture. Les colonnes « {{ window_label }} » appliquent la même règle sur toute la fenêtre, à partir de la première ligne de chacun.</p>
-  </details>
-  <div class="table-wrap"><table class="grid-table">
-    <thead><tr>
-      <th>Développeur</th><th>Régime</th>
-      <th>{{ grid_weeks }} dernières semaines<div class="weeks">{% for w in te.week_labels %}<span>{{ w }}</span>{% endfor %}</div></th>
-      <th class="num">Trous</th><th class="num">Couverture</th>
-      <th class="num">Trous ({{ window_label }})</th><th class="num">Couverture ({{ window_label }})</th>
-      <th>Dernier jour</th><th class="num">Retard</th><th class="num">Délai méd.</th><th>État</th>
-    </tr></thead>
-    <tbody>
-    {% for row in te.rows %}
-      <tr>
-        <td class="name">{{ row.name }}</td><td class="nowrap muted">{{ row.regime }}</td>
-        <td><div class="daygrid">{% for week in row.weeks %}<span class="week">{% for d in week %}<span class="cell {{ d.kind }}" data-tip="{{ d.date }} · {{ {'full':'pointé','leave':'congé / férié','empty':'trou','off':'non travaillé'}[d.kind] }}"></span>{% endfor %}</span>{% endfor %}</div></td>
-        <td class="num">{{ row.holes or '—' }}</td>
-        <td class="num" data-tip="{{ '%.1f' % row.worked }} / {{ '%.0f' % row.expected }} h">{{ pct(row.coverage) }}</td>
-        <td class="num">{{ row.y_holes or '—' }}</td>
-        <td class="num" data-tip="{{ '%.1f' % row.y_worked }} / {{ '%.0f' % row.y_expected }} h">{{ pct(row.y_coverage) }}</td>
-        <td class="nowrap">{{ row.last }}</td><td class="num">{{ row.late or '—' }}</td>
-        <td class="num">{% if row.lag is none %}—{% else %}{{ '%.0f' % row.lag }} j{% endif %}</td>
-        <td>{{ badge(row.status, row.status_label) }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  {% set holes = te.rows | selectattr('missing') | list %}
-  {% if holes %}
-  <details class="help"><summary>Jours à rattraper ({{ holes | sum(attribute='holes') }})</summary>
-    <ul class="plain">{% for row in holes %}<li><b>{{ row.name }}</b> — {{ row.missing | join(', ') }}</li>{% endfor %}</ul>
-  </details>
-  {% endif %}
-</section>
-
-{# --- Non facturable ------------------------------------------------------ #}
-{% set nf = non_facturable %}
-<section class="block">
-  <header class="block-head"><h2>Où part le non facturable — {{ hrs(nf.total) }}</h2></header>
-  <div class="two-col">
-    <div>
-      <h3>Par projet</h3>
-      <div class="table-wrap"><table class="compact">
-        <thead><tr><th>Projet</th><th>Nature</th><th class="num">Heures</th><th class="wide">Part</th></tr></thead>
-        <tbody>
-        {% for p in nf.projects[:15] %}
-          <tr><td>{{ p.project }}</td><td class="muted">{{ 'Invest' if p.kind == 'invest' else 'Interne' }}</td>
-              <td class="num">{{ hrs(p.hours) }}</td>
-              <td><span class="sharebar"><span style="width: {{ p.share }}%"></span></span> <span class="muted">{{ '%.0f' % p.share }} %</span></td></tr>
-        {% endfor %}
-        {% if nf.projects | length > 15 %}
-          {% set rest = nf.projects[15:] %}
-          <tr><td class="muted">{{ rest | length }} autres</td><td></td><td class="num">{{ hrs(rest | sum(attribute='hours')) }}</td><td></td></tr>
-        {% endif %}
-        </tbody>
-      </table></div>
-    </div>
-    {% if nf.leaks %}
-    <div>
-      <h3>Fuites — {{ hrs(nf.leaks | sum(attribute='hours')) }} sur des projets client</h3>
-      <p class="note">Travaillées pour un client et typées <code>non_billable</code>, presque toujours faute de ligne de commande — la seule part de l'écart qui se rattrape sans changer la façon de travailler.</p>
-      <div class="table-wrap"><table class="compact">
-        <thead><tr><th>Projet</th><th>Client</th><th class="num">Heures</th></tr></thead>
-        <tbody>{% for l in nf.leaks[:12] %}<tr><td>{{ l.project }}</td><td class="muted">{{ l.partner }}</td><td class="num">{{ hrs(l.hours) }}</td></tr>{% endfor %}</tbody>
-      </table></div>
-    </div>
-    {% endif %}
-  </div>
-
-  <h3>Par développeur — projet et tâche</h3>
-  <p class="note">Cliquer sur les heures ouvre toutes les lignes derrière (lues en direct dans Odoo) ; le nom de la tâche ouvre la tâche dans Odoo. Les libellés portent sur {{ window_label }}.</p>
-  {% for d in nf.per_dev %}
-  <details class="dev-card" {{ 'open' if single }}>
-    <summary><b>{{ d.name }}</b> <span class="muted">— {{ hrs(d.total) }} non facturables · {{ pct(d.share) }} du travaillé</span>
-      <a class="all" href="{{ d.all_url }}">toutes les lignes →</a></summary>
-    <div class="table-wrap"><table class="compact">
-      <thead><tr><th>Projet</th><th>Tâche</th><th class="num">Heures</th><th class="num">Part</th>{% if recent_days %}<th class="num">{{ recent_days }} j</th>{% endif %}<th class="wide">Libellés les plus pointés</th></tr></thead>
-      <tbody>
-      {% for it in d['items'] %}
-        <tr>
-          <td>{{ it.project }}{% if it.kind == 'invest' %} <span class="tag">invest</span>{% endif %}</td>
-          <td>{% if it.task_url %}<a href="{{ it.task_url }}" target="_blank" rel="noopener">{{ it.task }}</a>{% else %}<span class="muted">{{ it.task }}</span>{% endif %}</td>
-          <td class="num"><a href="{{ it.url }}">{{ hrs(it.hours) }}</a></td>
-          <td class="num muted">{{ '%.0f' % it.share }} %</td>
-          {% if recent_days %}<td class="num muted">{{ hrs(it.recent) if it.recent else '—' }}</td>{% endif %}
-          <td class="labels">{% for l in it.labels %}<span class="chip">{{ l.label[:50] }} <b>{{ '%.1f' % l.hours }}</b></span>{% endfor %}
-            {% if it.rest_n %}<a class="chip more" href="{{ it.url }}">+ {{ it.rest_n }} autres · {{ '%.1f' % it.rest_h }} h</a>{% endif %}</td>
-        </tr>
-      {% endfor %}
-      {% if d.rest_n %}
-        <tr><td class="muted">{{ d.rest_n }} autres projets / tâches</td><td></td>
-            <td class="num"><a href="{{ d.rest_url }}">{{ hrs(d.rest_h) }}</a></td>
-            <td class="num muted">{{ '%.0f' % d.rest_share }} %</td>{% if recent_days %}<td></td>{% endif %}<td></td></tr>
-      {% endif %}
-      </tbody>
-    </table></div>
-  </details>
-  {% endfor %}
-</section>
-
-{# --- Congés mal pointés ---------------------------------------------------- #}
-{% if conges.rows %}
-<section class="block" id="temps-conges">
-  <header class="block-head"><h2>Congés pointés hors du projet Congés — <a href="{{ conges.all_url }}">{{ hrs(conges.total) }}</a></h2></header>
-  <p class="note">Comptés comme du <b>travail</b> non facturable : ils font baisser le ratio sans qu'une heure ait été travaillée. Repérés sur le libellé, donc indicatifs — ils ne sont <b>pas</b> retirés du ratio. Le vrai correctif : poser la journée sur le projet Congés.</p>
-  <div class="table-wrap"><table class="compact narrow">
-    <thead><tr><th>Développeur</th><th>Projet</th><th class="num">Heures</th></tr></thead>
-    <tbody>{% for row in conges.rows[:12] %}<tr><td>{{ row.name }}{% if not row.trusted %} ⚠️{% endif %}</td><td>{{ row.project }}</td><td class="num"><a href="{{ row.url }}">{{ hrs(row.hours) }}</a></td></tr>{% endfor %}</tbody>
-  </table></div>
-</section>
+</details>
 {% endif %}
 
 {% if notes %}

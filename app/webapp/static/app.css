@@ -401,22 +401,6 @@ td.who { min-width: 9rem; max-width: 16rem; }
 .two-col td.num.nowrap { white-space: nowrap; }
 .callout.err-box { background: var(--band-err); border-left-color: var(--err); }
 
-/* --- tab 2: "Qui est disponible ?" pop-up --------------------------------- */
-dialog.who { width: min(1100px, calc(100vw - 32px)); max-height: 85vh; padding: 0;
-  color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-  border-radius: 14px; box-shadow: var(--shadow); }
-dialog.who::backdrop { background: rgba(0,0,0,.3); }
-dialog.who > .note, dialog.who > .table-wrap { margin: 0; padding: .8rem 1.2rem 0; }
-dialog.who > .table-wrap { padding-bottom: 1.2rem; }
-.who-bar { position: sticky; top: 0; display: flex; align-items: center; gap: 1rem;
-  padding: .8rem 1.2rem; background: var(--bg); border-bottom: 1px solid var(--line); }
-.who-bar h2 { margin: 0; font-size: 1.1rem; }
-.who-bar form { margin-left: auto; }
-.who-close { appearance: none; border: 0; background: none; color: var(--muted);
-  font-size: 1.1rem; cursor: pointer; padding: .2rem .4rem; border-radius: 6px; }
-.who-close:hover { background: var(--head); color: var(--fg); }
-.filters .who-open { align-self: center; }
-dialog.who .chip { white-space: normal; }
 
 /* Phone: the tabs moved to the bottom, so a jump only clears the top bar. */
 @media (max-width: 700px) {
@@ -445,3 +429,41 @@ dialog.who .chip { white-space: normal; }
 .rep-period { margin: 0 0 .6rem; }
 .rep-period .picker legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .seg.leave { background: var(--band-leave); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* --- Vue d'ensemble (tab 0) — one card per question ------------------------ */
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem; margin-bottom: 1.2rem; }
+.ov-card { padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: .4rem;
+  border-top: 4px solid var(--ok); }
+.ov-card.is-warn { border-top-color: var(--warn); }
+.ov-card.is-err { border-top-color: var(--err); }
+.ov-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+.ov-head h2 { font-size: 1rem; margin: 0; }
+.ov-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ov-value.is-warn, .ov-people b.is-warn { color: var(--warn); }
+.ov-value.is-err, .ov-people b.is-err { color: var(--err); }
+.ov-people b.is-ok { color: var(--ok); } .ov-people b.is-full { color: var(--muted); }
+.ov-lead { margin: .2rem 0 0; font-weight: 600; font-size: .9rem; }
+.ov-people { list-style: none; margin: .2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.ov-people li { display: grid; grid-template-columns: 9.5rem 1fr auto; align-items: center; gap: .6rem; font-size: .88rem; }
+.ov-people li:not(:has(.meter, .leftbar)) { grid-template-columns: 1fr auto; }
+.ov-people .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-people .leftbar { width: 100%; }
+.ov-people b { font-variant-numeric: tabular-nums; }
+.ov-items { margin: .2rem 0 0; padding-left: 1.1rem; font-size: .86rem; display: flex; flex-direction: column; gap: .2rem; }
+.ov-items li.is-warn::marker { color: var(--warn); } .ov-items li.is-err::marker { color: var(--err); }
+.ov-items a { color: inherit; }
+.ov-ahead { width: 100%; font-size: .85rem; }
+.ov-ahead .free.ok { color: var(--ok); font-weight: 600; }
+.ov-ahead .free.none { color: var(--muted); }
+.ov-card footer { margin-top: auto; padding-top: .4rem; }
+.ov-more { font-size: .85rem; font-weight: 600; }
+
+/* A folded section (Tendance, Répartition du temps): its title is the toggle. */
+details.fold > summary { cursor: pointer; display: flex; align-items: baseline; gap: .6rem;
+  flex-wrap: wrap; list-style: none; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before { content: "▸"; color: var(--link); }
+details.fold[open] > summary::before { content: "▾"; }
+details.fold > summary h2 { display: inline; margin: 0; }
+details.fold > .block { margin-top: .8rem; }

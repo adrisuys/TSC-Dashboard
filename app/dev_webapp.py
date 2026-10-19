@@ -16,7 +16,7 @@ now owns the whole page:
   the "Resynchroniser" button. A refresh loads the default view of all four
   tabs *before* swapping it in, so a failed one keeps the last good figures on
   screen and says so in the top bar.
-- **A tab is a URL** (`/travail`, `/capacite`, `/temps`, `/delais`). htmx swaps
+- **A tab is a URL** (`/apercu`, `/travail`, `/capacite`, `/temps`). htmx swaps
   the pane and pushes the URL, so a reload, a bookmark or the back button lands
   on the tab you were reading.
 - **`/lines` is the drill-down** behind the hours of "Par développeur — projet
@@ -37,8 +37,7 @@ from contextlib import asynccontextmanager
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_config  # noqa: E402
 import dev_capacite_view  # noqa: E402
-import dev_delais_view  # noqa: E402
-import dev_stats_report  # noqa: E402
+import dev_apercu_view  # noqa: E402
 import dev_capacity_report  # noqa: E402
 import dev_periods  # noqa: E402
 import dev_quickstart_report  # noqa: E402
@@ -65,8 +64,11 @@ REFRESH_ATTEMPTS = 2
 RETRY_SECONDS = 10
 
 # The tab order on screen.
-TABS = [("travail", "Le travail"), ("capacite", "Capacité"),
-        ("temps", "Feuilles de temps"), ("delais", "Délais")]
+# The overview first: one card per question, each linking to the tab below
+# that details it. (The delays tab is gone: the overview flags the tickets
+# stuck in their stage; `dev_stats_report` still runs on its own.)
+TABS = [("apercu", "Vue d'ensemble"), ("travail", "Tickets"),
+        ("capacite", "Disponibilité"), ("temps", "Facturable & feuilles")]
 TAB_KEYS = [k for k, _l in TABS]
 
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
@@ -133,9 +135,6 @@ native = NativeCache()
 # billable rate and the sheet coverage are measured up to now.
 TEMPS_PERIODS = ["month", "quarter", "year", "90d", "180d", "365d"]
 RECENTS = {"30": 30, "60": 60, "90": 90}
-# Tab 4 reads tickets by creation date: a short calendar period ("cette
-# semaine") would only hold the tickets already through, i.e. the fastest.
-DELAIS_PERIODS = ["quarter", "year", "30d", "90d", "180d", "365d"]
 
 
 def render_temps(request):
@@ -165,21 +164,6 @@ def _load_capacite(back, fwd):
     return lambda kw, cfg, today: (
         dev_quickstart_report.gather(kw, cfg, today, fwd),
         dev_capacity_report.gather(kw, cfg, today, back, fwd))
-
-
-def _load_delais(period, scope):
-    """A rolling period is a day count; a calendar one, its first day — both
-    worked out at load time, so a cached "Cette année" follows the date."""
-    def load(kw, cfg, today):
-        days = dev_periods.rolling_days(period)
-        since = None if days else dev_periods.period_range(period, today)[0]
-        return dev_stats_report.gather(kw, cfg, today, days, scope, since=since)
-    return load
-
-
-def _default_delais():
-    days = digest_config.load().get("stats_window_days", 90)
-    return f"{days}d" if f"{days}d" in DELAIS_PERIODS else "90d"
 
 
 def _load_travail(kw, cfg, today):
@@ -215,21 +199,7 @@ def render_capacite(request):
     vm = dev_capacite_view.build(qctx, cctx, digest_config.load(),
                                  [q["dev"]] if q["dev"] else None)
     return templates.get_template("capacite.html").render(
-        q=q, backs=[(k, f"{k} sem.") for k in BACKS],
-        fwds=[(k, f"{k} sem.") for k in FWDS], **vm)
-
-
-def render_delais(request):
-    """Tab 4. The 📌/⚡ scope is tab 1's — the static tab passes the
-    quickstart context's scope too — fetched first, outside the delays loader:
-    the cache lock is not re-entrant."""
-    q = {"days": dev_periods.from_legacy(request.query_params.get("days"),
-                                        DELAIS_PERIODS, _default_delais())}
-    scope = native.get(("travail",), _load_travail)[0]["scope"]
-    ctx = native.get(("delais", q["days"]), _load_delais(q["days"], scope))
-    vm = dev_delais_view.build(ctx, digest_config.load())
-    return templates.get_template("delais.html").render(
-        q=q, periods=dev_periods.choices(DELAIS_PERIODS), **vm)
+        q=q, fwds=[(k, f"{k} sem.") for k in FWDS], **vm)
 
 
 def _load_repartition(period):
@@ -250,23 +220,35 @@ def render_repartition(request):
 
 
 # Tab key -> renderer.
-NATIVE = {"travail": render_travail, "capacite": render_capacite,
-          "temps": render_temps, "delais": render_delais}
+def render_apercu(request):
+    """Tab 0 — the overview, from the default view of the three other tabs
+    (whole team, current year, default horizon): the same cache entries, so
+    it costs no Odoo call once they are loaded."""
+    cfg = digest_config.load()
+    qctx, todo = native.get(("travail",), _load_travail)
+    fwd, recent = dev_quickstart_report.WEEKS_FWD, dev_timesheet_report.RECENT_WINDOW
+    cq, cc = native.get(("capacite", 4, fwd), _load_capacite(4, fwd))
+    tctx = native.get(("temps", "year", recent), _load_temps("year", recent))
+    vm = dev_apercu_view.build(dev_travail_view.build(qctx, todo, cfg),
+                               dev_capacite_view.build(cq, cc, cfg),
+                               dev_timesheet_view.build(tctx, cfg))
+    return templates.get_template("apercu.html").render(**vm)
+
+
+NATIVE = {"apercu": render_apercu, "travail": render_travail,
+          "capacite": render_capacite, "temps": render_temps}
 
 
 def default_items():
     """The default view of every tab, loaded fresh — what a refresh swaps in.
-    Tab 4 reuses tab 1's 📌/⚡ scope, as the static tab did."""
-    cfg = digest_config.load()
+    The overview has no entry of its own: it reads the three below."""
     travail = _run(_load_travail)
-    delais = _default_delais()
     fwd = dev_quickstart_report.WEEKS_FWD
     return {
         ("travail",): travail,
         ("capacite", 4, fwd): _run(_load_capacite(4, fwd)),
         ("temps", "year", dev_timesheet_report.RECENT_WINDOW):
             _run(_load_temps("year", dev_timesheet_report.RECENT_WINDOW)),
-        ("delais", delais): _run(_load_delais(delais, travail[0]["scope"])),
         ("repartition", dev_repartition.DEFAULT_PERIOD):
             _run(_load_repartition(dev_repartition.DEFAULT_PERIOD)),
     }
@@ -487,6 +469,12 @@ def lines(request: Request):
     template = "_lines.html" if _is_htmx(request) else "lines.html"
     return templates.TemplateResponse(request, template,
                                       {**_page_ctx(request, None), **data})
+
+
+@app.get("/delais", include_in_schema=False)
+def delais_gone():
+    """The delays tab was folded into the overview — old bookmarks land there."""
+    return RedirectResponse("/apercu")
 
 
 @app.get("/{key}", response_class=HTMLResponse)
