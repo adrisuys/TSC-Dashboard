@@ -1,0 +1,54 @@
+{% if error %}
+  <p class="err">Impossible de lire les lignes dans Odoo.</p>
+  <pre>{{ error }}</pre>
+{% else %}
+<div class="lines">
+  <h2 class="lines-title">{{ name }} <span class="sep">·</span> {{ project_label }}</h2>
+  <p class="lines-sub">
+    {% if task_obj %}<a href="{{ task_obj.url }}" target="_blank" rel="noopener">{{ task_obj.name }} ↗</a>
+    {% else %}{{ task_label }}{% endif %}
+    · {{ subtitle }} · {{ date_from }} → {{ date_to }}
+  </p>
+  <div class="kpis">
+    <div class="kpi"><b>{{ '%.1f' % total }} h</b><span>au total</span></div>
+    <div class="kpi"><b>{{ rows | length }}</b><span>lignes</span></div>
+    <div class="kpi"><b>{{ labels | length }}</b><span>libellés distincts</span></div>
+  </div>
+
+  <h3>Par libellé</h3>
+  <div class="table-wrap"><table class="compact">
+    <thead><tr><th>Libellé</th><th class="num">Lignes</th><th class="num">Heures</th><th class="num">Part</th></tr></thead>
+    <tbody>
+    {% for l in labels %}
+      <tr><td>{{ l.label }}</td><td class="num">{{ l.count }}</td>
+          <td class="num">{{ '%.1f' % l.hours }} h</td>
+          <td class="num"><span class="share" style="--w: {{ '%.0f' % l.share }}%">{{ '%.0f' % l.share }}%</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  <h3>Toutes les lignes</h3>
+  <div class="table-wrap"><table class="compact">
+    <thead><tr>
+      <th>Date</th><th class="num">Heures</th><th>Libellé</th>
+      {% if not fixed_project %}<th>Projet</th>{% endif %}
+      {% if not fixed_task %}<th>Tâche</th>{% endif %}
+      <th>Type</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="nowrap muted">{{ r.date }}</td>
+        <td class="num">{{ '%.2f' % r.hours }} h</td>
+        <td>{{ r.label }}</td>
+        {% if not fixed_project %}<td>{{ r.project }}</td>{% endif %}
+        {% if not fixed_task %}<td>{% if r.task_url %}<a href="{{ r.task_url }}" target="_blank" rel="noopener">{{ r.task }}</a>{% else %}<span class="muted">(sans tâche)</span>{% endif %}</td>{% endif %}
+        <td class="muted">{{ r.kind }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">Aucune ligne.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}

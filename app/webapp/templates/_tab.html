@@ -1,0 +1,11 @@
+{% if content %}
+  <section class="pane native" id="pane-{{ active }}">{{ content | safe }}</section>
+{% else %}
+  <div class="callouts">
+    <div class="callout err-box">
+      <b>Cet onglet n'a pas pu lire Odoo.</b> Nouvel essai automatique au prochain
+      rafraîchissement, ou cliquez sur « Resynchroniser ».
+      {% if tab_error %}<details><summary>Détail de l'erreur</summary><pre>{{ tab_error }}</pre></details>{% endif %}
+    </div>
+  </div>
+{% endif %}

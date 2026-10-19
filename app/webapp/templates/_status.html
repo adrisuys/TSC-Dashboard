@@ -1,0 +1,22 @@
+<div id="status" class="status" hx-get="/status" hx-trigger="every 30s"
+     hx-swap="outerHTML">
+  {% if store.building %}
+    <span class="dot busy"></span><span>Mise à jour…</span>
+  {% elif store.error and store.built_at %}
+    <span class="dot err"></span>
+    <details class="status-err">
+      <summary>Dernière mise à jour échouée · données de {{ store.built_at.strftime('%H:%M') }}</summary>
+      <pre>{{ store.error }}</pre>
+    </details>
+  {% elif store.error %}
+    <span class="dot err"></span>
+    <details class="status-err">
+      <summary>Échec du chargement depuis Odoo</summary>
+      <pre>{{ store.error }}</pre>
+    </details>
+  {% elif store.built_at %}
+    <span class="dot ok"></span><span>Mis à jour à {{ store.built_at.strftime('%H:%M') }}</span>
+  {% else %}
+    <span class="dot busy"></span><span>Premier chargement…</span>
+  {% endif %}
+</div>

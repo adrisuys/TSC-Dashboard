@@ -1,0 +1,45 @@
+{# "Répartition du temps" — its own block, swapped alone when the period
+   changes. Data from dev_repartition.view(). #}
+{% macro h(v) %}{{ '%.0f' % v }} h{% endmacro %}
+{% macro pc(v) %}{% if v is not none %}{{ '%.0f' % v }} %{% endif %}{% endmacro %}
+{% macro p(v) %}{% if v is not none %} · {{ '%.0f' % v }} %{% endif %}{% endmacro %}
+{% macro bar(r) %}<span class="stack tall">{% if r.plan %}<span class="seg plan" style="width: {{ r.plan_w }}%" data-tip="Planifié · {{ h(r.plan) }}{{ p(r.plan_pct) }}"></span>{% endif %}{% if r.quick %}<span class="seg billable" style="width: {{ r.quick_w }}%" data-tip="Quickstart · {{ h(r.quick) }}{{ p(r.quick_pct) }}"></span>{% endif %}{% if r.internal %}<span class="seg internal" style="width: {{ r.internal_w }}%" data-tip="Interne · {{ h(r.internal) }}{{ p(r.internal_pct) }}"></span>{% endif %}{% if r.leave %}<span class="seg leave" style="width: {{ r.leave_w }}%" data-tip="Congé · {{ h(r.leave) }}{{ p(r.leave_pct) }}"></span>{% endif %}{% if r.unlogged >= 0.5 %}<span class="seg unlogged" style="width: {{ r.unlogged_w }}%" data-tip="Non pointé · {{ h(r.unlogged) }}{{ p(r.unlogged_pct) }}"></span>{% endif %}</span>{% endmacro %}
+{% macro row(r, cls='') %}
+  <tr class="{{ cls }}">
+    <td class="name">{{ r.name }}{% if r.since %}<div class="sub">depuis le {{ r.since.strftime('%d/%m/%Y') }}</div>{% endif %}</td>
+    <td class="wide">{% if r.capacity < 0.05 and r.worked < 0.05 %}<span class="muted">aucun jour au calendrier</span>{% else %}{{ bar(r) }}{% endif %}</td>
+    <td class="num">{{ h(r.plan) }}<div class="sub">{{ pc(r.plan_pct) }}</div></td>
+    <td class="num">{{ h(r.quick) }}<div class="sub">{{ pc(r.quick_pct) }}</div></td>
+    <td class="num">{{ h(r.internal) }}<div class="sub">{{ pc(r.internal_pct) }}</div></td>
+    <td class="num">{{ h(r.leave) }}<div class="sub">{{ pc(r.leave_pct) }}</div></td>
+    <td class="num">{{ h(r.unlogged) }}<div class="sub">{{ pc(r.unlogged_pct) }}</div></td>
+    <td class="num">{{ h(r.capacity) }}{% if r.over >= 0.5 %}<div class="sub" data-tip="Heures pointées (congés compris) au-delà du calendrier">+{{ h(r.over) }} sup.</div>{% endif %}</td>
+  </tr>
+{% endmacro %}
+<section class="block" id="repartition">
+  <header class="block-head">
+    <h2>Répartition du temps <span class="muted">— {{ span }}</span></h2>
+    <div class="legend"><span><i class="sw plan"></i>planifié</span><span><i class="sw billable"></i>quickstart</span><span><i class="sw internal"></i>interne</span><span><i class="sw leave"></i>congé</span><span><i class="sw unlogged"></i>non pointé</span></div>
+  </header>
+  <div class="rep-period" role="group" aria-label="Période">
+    {% for key, label in periods %}
+      <button type="button" aria-pressed="{{ 'true' if key == period else 'false' }}"
+              hx-get="/repartition?period={{ key }}{% if dev %}&dev={{ dev | urlencode }}{% endif %}"
+              hx-target="#repartition" hx-swap="outerHTML">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <details class="help"><summary>Comment lire</summary>
+    <p>La barre fait 100 % du <b>calendrier</b> du développeur sur la période (ses jours et heures propres), et chaque segment est du temps <b>réellement pointé</b>, jamais du temps assigné : quelqu'un alloué 3 jours par semaine sur un projet planifié qui en a presté 2 en montre 2.</p>
+    <p><b>Planifié</b> = heures pointées sur un projet qui a au moins un créneau d'allocation sur la période. <b>Quickstart</b> = heures pointées sur tout autre projet client. <b>Interne</b> = projets sans client (ou sans projet). <b>Congé</b> = congés et fériés pointés. <b>Non pointé</b> = calendrier − tout le reste.</p>
+    <p>Une période en cours s'arrête à aujourd'hui, inclus : en journée, les heures du jour ne sont souvent pas encore pointées. Le calendrier court à partir de la première ligne de pointage du développeur (« depuis le … ») et c'est l'actuel, même pour le passé. Des heures au-delà du calendrier sont signalées « sup. » et allongent la barre.</p>
+  </details>
+  {% if not rows %}<p class="note">Aucun développeur sur la période.</p>{% else %}
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th><th class="wide">Répartition</th><th class="num">Planifié</th><th class="num">Quickstart</th><th class="num">Interne</th><th class="num">Congé</th><th class="num">Non pointé</th><th class="num">Calendrier</th></tr></thead>
+    <tbody>
+      {% for r in rows %}{{ row(r) }}{% endfor %}
+      {% if team %}{{ row(team, 'rep-team') }}{% endif %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>

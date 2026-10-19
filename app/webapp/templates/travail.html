@@ -1,0 +1,138 @@
+{# Tab 1, native. Data from dev_travail_view.build(). #}
+{% macro hrs(v) %}{{ '%.1f' % v }} h{% endmacro %}
+{% macro proj(p) %}{% if p.planned is none %}<span class="muted">—</span>{% else %}<span class="proj {{ 'planned' if p.planned else 'qs' }}" data-tip="{{ 'Planifié — jours alloués dans le plan de capacité' if p.planned else 'Quickstart — aucune allocation, n’importe qui peut le prendre' }}">{{ '📌' if p.planned else '⚡' }}</span> {{ p.name }}{% endif %}{% endmacro %}
+{% macro burnbar(pct, over=false) %}{% if pct is not none %}<span class="burn{{ ' over' if over }}"><span style="width: {{ pct }}%"></span></span>{% endif %}{% endmacro %}
+{% set k = kpi %}
+
+<form class="filters" hx-get="/travail" hx-target="#pane" hx-push-url="true"
+      hx-trigger="change" hx-indicator="#pane">
+  <label>Projets
+    <select name="kind">
+      <option value="all" {{ 'selected' if kind == 'all' }}>Tous</option>
+      <option value="planned" {{ 'selected' if kind == 'planned' }}>📌 Planifiés</option>
+      <option value="quickstart" {{ 'selected' if kind == 'quickstart' }}>⚡ Quickstart</option>
+    </select>
+  </label>
+  <label>Développeur
+    <select name="dev">
+      <option value="">Toute l'équipe</option>
+      {% for n in all_names %}<option value="{{ n }}" {{ 'selected' if q.dev == n }}>{{ n }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" name="parked" value="1" {{ 'checked' if q.parked }}> Afficher les tickets parqués</label>
+  {% if planned_projects %}<span class="filters-meta">📌 dans le plan : {{ planned_projects | join(', ') }}</span>{% endif %}
+</form>
+
+<div class="kpi-row">
+  <div class="card kpi-card">
+    <div class="kpi-label">À prendre</div>
+    <div class="kpi-value {{ 'warn' if k.unclaimed else 'ok' }}">{{ k.unclaimed }}</div>
+    <div class="kpi-sub">{{ k.unclaimed_spec }} à estimer · {{ k.unclaimed - k.unclaimed_spec }} à développer{% if k.stale %} · <b class="err-txt">{{ k.stale }} qui traînent</b>{% endif %}</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Tickets en cours</div>
+    <div class="kpi-value">{{ k.live }}</div>
+    <div class="kpi-sub">{{ k.parked }} parqués en aval (hors totaux)</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Reste à brûler</div>
+    <div class="kpi-value">{{ '%.0f' % k.left }} h</div>
+    <div class="kpi-sub">sur {{ '%.0f' % k.est }} h estimées · ≈ {{ '%.1f' % (k.left / 8) }} j</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Sans estimation</div>
+    <div class="kpi-value {{ 'warn' if k.unest }}">{{ k.unest }}</div>
+    <div class="kpi-sub">ticket(s) en cours qui n'ajoutent rien au reste</div>
+  </div>
+</div>
+
+<div class="callouts">
+  <div class="callout">Cet onglet dit <b>ce qui reste à faire</b>, pas de combien de temps chacun dispose : un reste n'est pas une disponibilité tant qu'il n'est pas confronté au régime, aux congés et aux jours déjà promis. <a href="/capacite" hx-get="/capacite" hx-target="#pane" hx-push-url="true">L'onglet Capacité</a> répond à ça (« Temps allouable »).</div>
+</div>
+
+{# --- À prendre ------------------------------------------------------------ #}
+<section class="block">
+  <header class="block-head">
+    <h2>À prendre — {{ k.unclaimed }} ticket{{ 's' if k.unclaimed != 1 }}</h2>
+    <div class="legend"><span>📌 planifié</span><span>⚡ quickstart</span><span><i class="dot err"></i>traîne dans l'étape</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p><b>Spec validation / Estim</b> sans analyste dev, et <b>To Do</b> sans aucun développeur assigné. Triés du plus ancien au plus récent dans chaque étape. Un ticket « traîne » quand il n'a pas bougé depuis plus de {% for s, d in stale_days.items() %}{{ d }} j en {{ s }}{{ ', ' if not loop.last }}{% endfor %}.</p>
+    <p>📌 / ⚡ dit qui paie le travail (jours alloués ou non), pas son urgence.</p>
+  </details>
+  {% if not groups %}<p class="note">Rien à prendre — tout est réclamé.</p>{% endif %}
+  {% for g in groups %}
+  <h3>{{ g.stage }} <span class="count">{{ g.rows | length }}</span></h3>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Ticket</th><th>Projet</th><th>Statut</th>
+      {% if g.stage == spec_stage %}<th>Analyste</th>{% else %}<th>Développeur(s)</th>{% endif %}
+      <th class="num">Pointé / estimé</th><th class="num">Dernière MàJ</th></tr></thead>
+    <tbody>
+    {% for r in g.rows %}
+      <tr>
+        <td class="ticket"><a href="{{ r.url }}" target="_blank" rel="noopener" class="tid">{{ r.id }}</a> {{ r.name }}</td>
+        <td class="nowrap">{{ proj(r.project) }}</td>
+        <td>{% if r.state_cls %}<span class="badge {{ r.state_cls }}"><i></i>{{ r.state }}</span>{% else %}<span class="muted">{{ r.state }}</span>{% endif %}</td>
+        <td class="nowrap">{% if g.stage == spec_stage %}{{ r.analyst or '—' }}{% else %}{{ r.devs | join(', ') or '—' }}{% endif %}</td>
+        <td class="num">{% if r.est %}{{ '%.1f' % r.spent }} / {{ hrs(r.est) }} {{ burnbar([r.pct, 100] | min, r.pct > 100) }}{% elif r.spent %}{{ hrs(r.spent) }} pointées{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="num nowrap {{ 'err-txt' if r.stale }}" data-tip="{{ 'Au-delà de ' ~ r.limit ~ ' j dans cette étape' if r.stale else 'Dans les temps' }}">{% if r.stale %}<i class="dot err"></i> {% endif %}{% if r.age < 1 %}aujourd'hui{% else %}il y a {{ '%.0f' % r.age }} j{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endfor %}
+</section>
+
+{# --- Charge par développeur ---------------------------------------------- #}
+<section class="block">
+  <header class="block-head">
+    <h2>Charge par développeur</h2>
+    <div class="legend"><span><i class="sw billable"></i>reste à brûler</span><span><i class="sw burnt"></i>pointé / estimé</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Comptent : {{ dev_stages | join(' · ') }} comme assigné, et « {{ spec_stage }} » comme analyste tant que le ticket n'est pas Approuvé. Un ticket partagé compte pour chacun.</p>
+    <p><b>Reste</b> = dev_time − heures pointées <b>par les développeurs</b> (pas les heures totales du ticket, qui portent aussi le fonctionnel, la gestion de projet et le support). Un ticket sans estimation ajoute 0 et est compté à part.</p>
+    <p><b>⏸️ Parqués</b> : assignés mais posés en {{ parked_stages | join(', ') }} — en attente de quelqu'un d'autre. Hors totaux, mais chacun peut revenir.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th><th class="num">Tickets</th><th class="num">Estimé</th><th class="num">Pointé (perso)</th>
+      <th class="wide">Reste à brûler</th><th class="num">Sans estim.</th><th class="num">⏸️ Parqués</th></tr></thead>
+    <tbody>
+    {% for d in load %}
+      <tr>
+        <td class="name"><a href="#dev-{{ loop.index }}" class="jump">{{ d.name }}</a></td>
+        <td class="num">{{ d.tasks }}</td><td class="num">{{ hrs(d.est) }}</td><td class="num">{{ hrs(d.own) }}</td>
+        <td><span class="leftbar"><span style="width: {{ d.left_pct }}%"></span></span> <b>{{ hrs(d.left) }}</b> <span class="muted">≈ {{ '%.1f' % (d.left / 8) }} j</span></td>
+        <td class="num">{% if d.unest %}<span class="badge warn" data-tip="Ces tickets n'ajoutent rien au reste : 0 h ne veut pas dire libre"><i></i>{{ d.unest }}</span>{% else %}—{% endif %}</td>
+        <td class="num muted">{{ d.parked or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  {% for d in load %}
+  <details class="dev-card" id="dev-{{ loop.index }}" {{ 'open' if q.dev }}>
+    <summary><b>{{ d.name }}</b> <span class="muted">— {{ d.tasks }} ticket{{ 's' if d.tasks != 1 }} · {{ hrs(d.left) }} de reste sur {{ hrs(d.est) }}{% if d.unest %} · ❓ {{ d.unest }} sans estim.{% endif %}{% if d.parked %} · ⏸️ {{ d.parked }} parqués{% endif %}</span></summary>
+    {% set rows = d.rows if q.parked else d.rows | selectattr('counted') | list %}
+    {% if not rows %}<p class="note">Aucun ticket{{ ' en cours' if not q.parked }}.</p>{% else %}
+    <div class="table-wrap"><table class="compact">
+      <thead><tr><th>Ticket</th><th>Projet</th><th>Étape</th><th class="num">Perso</th><th class="num">Devs</th><th class="num">Ticket</th><th class="num">Estimé</th><th class="num">Reste</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{{ 'parked' if r.parked }}">
+          <td class="ticket">{% if r.parked %}⏸️ {% endif %}<a href="{{ r.url }}" target="_blank" rel="noopener" class="tid">{{ r.id }}</a> {{ r.name }}</td>
+          <td class="nowrap">{{ proj(r.project) }}</td>
+          <td class="nowrap"><span class="stage">{{ r.stage }}</span></td>
+          <td class="num">{{ '%.1f' % r.own }}</td><td class="num">{{ '%.1f' % r.devs_h }}</td><td class="num muted">{{ '%.1f' % r.task_h }}</td>
+          <td class="num">{{ hrs(r.est) if r.est else '—' }}</td>
+          <td class="num {{ 'err-txt strong' if r.over }}">{% if r.left is none %}—{% else %}{{ '%.1f' % r.left }} h{{ ' ⚠️' if r.over }}{% endif %}</td>
+          <td>{{ burnbar(r.burn, r.over) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if not q.parked and d.parked %}<p class="note">{{ d.parked }} ticket(s) parqué(s) masqué(s) — cocher « Afficher les tickets parqués » en haut.</p>{% endif %}
+    {% endif %}
+  </details>
+  {% endfor %}
+</section>

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+# Local Claude Code settings
+.claude/settings.local.json
+# Never commit an Odoo API key file
+api_key*.txt

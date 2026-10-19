@@ -1,0 +1,287 @@
+{# Tab 2, native. Data from dev_capacite_view.build(). #}
+{% macro hrs(v, signed=false) %}{% if signed %}{{ '+' if v >= 0 else '−' }}{{ '%.0f' % (v | abs) }} h{% else %}{{ '%.0f' % v }} h{% endif %}{% endmacro %}
+{% macro occbadge(band, avg, gap, partial=false) %}{% if gap %}<span class="badge warn" data-tip="Non mesurable : moins de {{ '%.0f' % gap_pct }} % de la capacité pointée, sans absence qui l'explique"><i></i>non mesurable</span>{% elif avg is none %}<span class="muted">—</span>{% else %}<span class="badge {{ band }}"><i></i>{{ '%.0f' % avg }} %{{ ' (partiel)' if partial }}</span>{% endif %}{% endmacro %}
+{% set k = kpi %}
+
+<form class="filters" hx-get="/capacite" hx-target="#pane" hx-push-url="true"
+      hx-trigger="change" hx-indicator="#pane">
+  <label>Historique
+    <select name="back">{% for w in (4, 8, 12) %}<option value="{{ w }}" {{ 'selected' if q.back == w|string }}>{{ w }} semaines</option>{% endfor %}</select>
+  </label>
+  <label>À venir
+    <select name="fwd">{% for w in (4, 5, 8) %}<option value="{{ w }}" {{ 'selected' if q.fwd == w|string }}>{{ w }} semaines</option>{% endfor %}</select>
+  </label>
+  <label>Développeur
+    <select name="dev">
+      <option value="">Toute l'équipe</option>
+      {% for n in all_names %}<option value="{{ n }}" {{ 'selected' if q.dev == n }}>{{ n }}</option>{% endfor %}
+    </select>
+  </label>
+  <span class="filters-meta">{{ n_lines }} lignes de pointage · {{ n_slots }} créneaux d'allocation · {{ n_tasks }} tickets dev vivants</span>
+  <button type="button" class="resync who-open" onclick="document.getElementById('who').showModal()">Qui est disponible ?</button>
+</form>
+
+{# --- "Qui est disponible ?" — the whole team, ignores the filter ----------- #}
+<dialog id="who" class="who" aria-labelledby="who-title" onclick="if (event.target === this) this.close()">
+  <div class="who-bar">
+    <h2 id="who-title">Qui est disponible ? <span class="muted">— {{ sem.label }}</span></h2>
+    <form method="dialog"><button class="who-close" aria-label="Fermer">✕</button></form>
+  </div>
+  <p class="note">Le plus disponible en haut : <b>temps allouable</b> de la semaine (heures libres hors plan − reste des tickets quickstart), puis les heures libres que le plan laisse les semaines suivantes{% if engagement_span %} ({{ engagement_span }}){% endif %}. Toute l'équipe, quel que soit le filtre.</p>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th class="num">#</th><th>Développeur</th><th>Cette semaine</th><th class="num">Ensuite / sem.</th><th>Occupation récente</th><th>À savoir</th></tr></thead>
+    <tbody>
+    {% for r in who %}
+      <tr>
+        <td class="num muted">{{ loop.index }}</td>
+        <td class="name">{{ r.name }}</td>
+        <td class="nowrap"><span class="badge {{ 'ok' if r.state == 'ok' else 'err' if r.state == 'err' else 'muted' }}"><i></i>{{ '⚫ plein · ' if r.state == 'full' }}{{ hrs(r.allocable, true) }}</span>
+          <span class="sub">{{ hrs(r.free) }} libres · {{ hrs(r.queue) }} en file</span></td>
+        <td class="num">{% if r.pool %}<i class="muted">renfort</i>{% else %}{{ hrs(r.ahead) }}{% endif %}</td>
+        <td>{{ occbadge(r.occ_band, r.occ, r.gap) }}</td>
+        <td>{% if r.unestimated %}<span class="chip">+{{ r.unestimated }} ticket(s) sans estimation</span>{% endif %}{% if r.leave_days > 0.1 %}<span class="chip">−{{ '%.1f' % r.leave_days }} j congé</span>{% endif %}{% if r.occ is not none and r.occ >= full_above and r.state == 'ok' %}<span class="chip">plein ces dernières semaines : plan incomplet ?</span>{% endif %}{% if r.projects %}<span class="chip">planifié : {{ r.projects | join(', ') }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</dialog>
+
+<div class="kpi-row">
+  <div class="card kpi-card">
+    <div class="kpi-label">Temps allouable — {{ sem.label }}</div>
+    <div class="kpi-value {{ 'ok' if k.allocable > 0.5 else 'err' }}">{{ hrs(k.allocable, true) }}</div>
+    <div class="kpi-sub">{{ hrs(k.free) }} libres pour {{ hrs(k.queue) }} de quickstart en file</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Occupation moyenne — {{ past_span }}</div>
+    <div class="kpi-value">{% if k.occupation is none %}—{% else %}{{ '%.0f' % k.occupation }} %{% endif %}</div>
+    <div class="kpi-sub">semaines complètes{% if k.unmeasured %} · {{ k.unmeasured }} non mesurable(s){% endif %}</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Part quickstart — {{ past_span }}</div>
+    <div class="kpi-value">{% if k.qs_share is none %}—{% else %}{{ '%.0f' % k.qs_share }} %{% endif %}</div>
+    <div class="kpi-sub">{{ hrs(k.qs_hours) }} quickstart sur {{ hrs(k.qs_worked) }} pointées · semaines complètes</div>
+  </div>
+  <div class="card kpi-card">
+    <div class="kpi-label">Projets sans dev planifié</div>
+    <div class="kpi-value {{ 'err' if k.no_dev else 'ok' }}">{{ k.no_dev }}</div>
+    <div class="kpi-sub">{% if k.no_dev %}{{ hrs(k.no_dev_hours) }} de reste à faire sans personne devant{% else %}tout reste à faire a du dev planifié{% endif %}</div>
+  </div>
+</div>
+
+{# --- 1. Cette semaine ---------------------------------------------------- #}
+{% set s = sem %}
+<section class="block">
+  <header class="block-head">
+    <h2>Qui peut prendre un ticket — {{ s.label }}</h2>
+    <div class="legend"><span><i class="sw ok"></i>de la place</span><span><i class="sw err"></i>la file dépasse la semaine</span><span><i class="sw full"></i>entièrement planifié</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p><b>Planifié</b> = jours d'allocation × 8 h sur un projet du plan. <b>Libre</b> = capacité de la semaine (calendrier propre, congés et fériés déduits) − planifié : la place pour du quickstart. Les colonnes <b>QS</b> ne portent que les tickets <b>hors plan</b> : leur dev_time (+n ? = sans estimation), les heures pointées par le développeur, et le reste à brûler. Semaine entière, non proratisée.</p>
+    <p><b>Temps allouable</b> = libre − reste QS. Positif : il peut prendre un ticket de plus. Négatif : la file dépasse déjà sa semaine. ⚫ : semaine entièrement planifiée. Le plus contraint en haut.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th><th>Semaine</th><th class="num">Planifié</th><th class="num">Libre</th><th>Projet assigné</th>
+      <th class="num">Dev_time QS</th><th class="num">Pointé perso QS</th><th class="num">Reste QS</th><th class="num">⏸️</th><th class="wide">Temps allouable</th></tr></thead>
+    <tbody>
+    {% for r in s.rows %}
+      <tr>
+        <td class="name">{{ r.name }}</td>
+        <td class="nowrap muted">{{ r.days }} j · {{ '%.0f' % r.hours }} h{% if r.overridden %} <span data-tip="Calendrier de prod corrigé par dev_schedules">*</span>{% endif %}</td>
+        <td class="num">{{ ('%.1f j' % r.planned_days) if r.planned_days else '—' }}</td>
+        <td class="num">{{ hrs(r.free) }}{% if r.leave_days > 0.1 %}<div class="sub">−{{ '%.1f' % r.leave_days }} j congé</div>{% endif %}</td>
+        <td>{{ r.projects | join(', ') or '—' }}</td>
+        <td class="num">{{ hrs(r.estimated) }}{% if r.unestimated %} <span class="badge warn" data-tip="{{ r.unestimated }} ticket(s) sans estimation : 0 h ne veut pas dire libre"><i></i>+{{ r.unestimated }} ?</span>{% endif %}</td>
+        <td class="num">{{ hrs(r.own) }}</td><td class="num">{{ hrs(r.queue) }}</td>
+        <td class="num muted">{{ r.parked or '—' }}</td>
+        <td class="nowrap"><span class="diverge"><span class="neg">{% if r.allocable < 0 %}<span style="width: {{ r.bar * 2 }}%"></span>{% endif %}</span><span class="pos">{% if r.allocable >= 0 and r.state != 'full' %}<span style="width: {{ r.bar * 2 }}%"></span>{% endif %}</span></span>
+          <b class="{{ 'ok-txt' if r.state == 'ok' else 'err-txt' if r.state == 'err' else 'muted' }}">{{ '⚫ ' if r.state == 'full' }}{{ hrs(r.allocable, true) }}</b></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="note"><b>Équipe : {{ hrs(s.totals.free) }} libres cette semaine pour {{ hrs(s.totals.queue) }} de quickstart en file → {{ hrs(s.totals.allocable, true) }} allouables.</b>
+    {{ "La file dépasse la place de la semaine ; ce qui déborde attendra la suivante." if s.totals.allocable < 0 else "Il reste de la place pour de nouveaux tickets." }}
+    Les projets planifiés se lisent contre leurs jours d'allocation, pas contre les heures libres — voir l'autonomie plus bas.</p>
+</section>
+
+{# --- 2. Occupation --------------------------------------------------------- #}
+<section class="block">
+  <header class="block-head">
+    <h2>Occupation — heures pointées vs capacité nette ({{ past_span }})</h2>
+    <div class="legend"><span><i class="sw ok"></i>&lt; {{ '%.0f' % room_below }} %</span><span><i class="sw warn"></i>{{ '%.0f' % room_below }}–{{ '%.0f' % full_above }} %</span><span><i class="sw err"></i>≥ {{ '%.0f' % full_above }} %</span><span><i class="sw leave"></i>congé</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Occupation = heures pointées ÷ <b>capacité nette</b> (calendrier propre du développeur, moins les absences pointées sur le projet Congés). La semaine en cours (<b>*</b>) est proratisée aux jours ouvrés déjà écoulés pour ce développeur, et <b>exclue de la moyenne</b> : des feuilles remplies en fin de semaine feraient passer une équipe pleine pour une équipe disponible.</p>
+    <p>Un pointage sous {{ '%.0f' % gap_pct }} % de la capacité sans absence n'est <b>jamais</b> de la place libre : il est marqué non mesurable. ⚠️ dans une case = plus de 120 % (heures sup., ou heures pointées un jour posé). Client / interne se lit sur le client du projet.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th><th>Régime</th>
+      {% for w in past_labels %}<th class="num">{{ w.label }}{{ '*' if w.current }}</th>{% endfor %}
+      <th>Moyenne</th><th class="wide">Client / interne</th><th>Remarques</th></tr></thead>
+    <tbody>
+    {% for r in occ %}
+      <tr>
+        <td class="name">{{ r.name }}</td><td class="nowrap muted">{{ r.days }} j · {{ '%.0f' % r.hours }} h</td>
+        {% for c in r.cells %}
+          <td class="heat {{ c.band }}{{ ' current' if c.current }}" data-tip="{{ c.label }}{{ ' (en cours, proratisée)' if c.current }} · {% if c.share is none %}{{ 'congé' if c.leave else 'pas de capacité' }}{% else %}{{ '%.1f' % c.worked }} / {{ '%.0f' % c.capacity }} h{% endif %}">
+            {% if c.share is none %}<span class="muted">{{ 'congé' if c.leave else '—' }}</span>{% else %}{{ '%.0f' % c.share }} %{{ ' ⚠️' if c.over }}{% endif %}</td>
+        {% endfor %}
+        <td>{{ occbadge(r.band, r.avg, r.gap, r.partial) }}</td>
+        <td><span class="stack"><span class="seg billable" style="width: {{ r.client_pct }}%" data-tip="Client · {{ '%.1f' % r.client }} h"></span><span class="seg internal" style="width: {{ 100 - r.client_pct }}%" data-tip="Interne · {{ '%.1f' % r.internal }} h"></span></span>
+          <div class="sub">{{ '%.0f' % r.client }} h client · {{ '%.0f' % r.internal }} h interne</div></td>
+        <td>{% for f in r.flags %}<span class="chip">{{ f }}</span>{% else %}<span class="muted">—</span>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{# --- 2b. Part du quickstart ------------------------------------------------ #}
+<section class="block">
+  <header class="block-head">
+    <h2>Part du quickstart — temps pointé ({{ past_span }})</h2>
+    <div class="legend"><span><i class="sw plan"></i>projets planifiés</span><span><i class="sw billable"></i>quickstart</span><span><i class="sw internal"></i>interne</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Part des heures <b>pointées</b> (congés exclus) passée sur du <b>quickstart</b> : un projet client sans aucun créneau d'allocation sur la période. Un projet planifié pour quelqu'un compte comme planifié pour tout le monde. L'<b>interne</b> (projets sans client : réunions, outils maison) est mis à part : ce n'est pas du quickstart.</p>
+    <p>La base est le temps pointé, pas la capacité : une semaine mal pointée ne fausse pas la part, elle se lit dans l'occupation au-dessus. La semaine en cours (<b>*</b>) est affichée mais <b>exclue de la moyenne</b>.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th>
+      {% for w in past_labels %}<th class="num">{{ w.label }}{{ '*' if w.current }}</th>{% endfor %}
+      <th class="num">Moyenne</th><th class="wide">Planifié / quickstart / interne</th></tr></thead>
+    <tbody>
+    {% for r in qs_share %}
+      <tr>
+        <td class="name">{{ r.name }}</td>
+        {% for c in r.cells %}
+          <td class="num{{ ' muted' if c.current }}" data-tip="{{ c.label }}{{ ' (en cours)' if c.current }} · {{ '%.1f' % c.quick }} h quickstart sur {{ '%.1f' % c.worked }} h pointées">{% if c.share is none %}<span class="muted">—</span>{% else %}{{ '%.0f' % c.share }} %{% endif %}</td>
+        {% endfor %}
+        <td class="num"><b>{% if r.share is none %}—{% else %}{{ '%.0f' % r.share }} %{% endif %}</b></td>
+        <td><span class="stack"><span class="seg plan" style="width: {{ r.plan_pct }}%" data-tip="Planifié · {{ '%.1f' % r.plan }} h"></span><span class="seg billable" style="width: {{ r.quick_pct }}%" data-tip="Quickstart · {{ '%.1f' % r.quick }} h"></span><span class="seg internal" style="width: {{ r.internal_pct }}%" data-tip="Interne · {{ '%.1f' % r.internal }} h"></span></span>
+          <div class="sub">{{ '%.0f' % r.plan }} h planifié · {{ '%.0f' % r.quick }} h quickstart · {{ '%.0f' % r.internal }} h interne</div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{# --- 2c. Répartition du temps — loaded on its own, its own period ---------- #}
+<section class="block" id="repartition" hx-get="/repartition{% if q.dev %}?dev={{ q.dev | urlencode }}{% endif %}" hx-trigger="load" hx-swap="outerHTML">
+  <header class="block-head"><h2>Répartition du temps</h2></header>
+  <p class="note muted">Chargement…</p>
+</section>
+
+{# --- 3. Engagement à venir -------------------------------------------------- #}
+<section class="block">
+  <header class="block-head">
+    <h2>Engagement à venir ({{ future_span }})</h2>
+    <div class="legend"><span><i class="sw billable"></i>jours engagés / jours disponibles</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Jours d'allocation déjà engagés, rapportés aux jours de la semaine propre du développeur <b>après congés et fériés</b>. <b>Les jours libres viennent du plan seul</b> : l'occupation est à côté pour que les deux ne soient jamais lus séparément — 3 jours non planifiés chez quelqu'un d'occupé à plus de 100 %, c'est un plan incomplet, pas une disponibilité. Une semaine vide est un trou dans le plan, pas une semaine libre démontrée.</p>
+  </details>
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Développeur</th><th>Régime</th>{% for w in future_labels %}<th>{{ w }}</th>{% endfor %}<th class="num">Jours libres/sem.</th><th>Occupation</th><th>Engagé sur</th></tr></thead>
+    <tbody>
+    {% for r in forward %}
+      <tr>
+        <td class="name">{{ r.name }}</td><td class="nowrap muted">{{ r.days }} j</td>
+        {% for c in r.cells %}
+          <td class="commit" data-tip="{{ c.label }} · {{ '%.1f' % c.days }} j engagés sur {{ '%.1f' % c.available }} j disponibles">
+            {% if r.pool_idle %}<span class="muted">—</span>{% else %}<span class="cbar"><span style="width: {{ c.pct }}%"></span></span><span class="sub">{{ '%.1f' % c.days }}{% if c.short %} / {{ '%.1f' % c.available }} j{% endif %}</span>{% endif %}</td>
+        {% endfor %}
+        <td class="num">{% if r.pool_idle %}<i class="muted">renfort</i>{% else %}{{ '%+.1f' % r.free_avg }}{% endif %}</td>
+        <td>{{ occbadge(r.band, r.occupancy, r.gap) }}</td>
+        <td>{{ r.targets | join(', ') or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if engagement %}
+  <details class="help"><summary>Le même engagement en heures libres ({{ engagement_span }})</summary>
+    <div class="table-wrap"><table class="compact">
+      <thead><tr><th>Développeur</th>{% for c in engagement[0].cells %}<th class="num">{{ c.label }}</th>{% endfor %}<th class="num">Libre moy./sem.</th><th>Engagé sur</th></tr></thead>
+      <tbody>{% for r in engagement %}<tr><td>{{ r.name }}</td>
+        {% for c in r.cells %}<td class="num">{% if c.days %}{{ '%.1f' % c.days }} j · {% else %}<span class="muted">— · </span>{% endif %}{{ hrs(c.free) }}</td>{% endfor %}
+        <td class="num strong">{{ hrs(r.free_avg) }}</td><td>{{ r.targets | join(', ') or '—' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+</section>
+
+{# --- 4. Autonomie ----------------------------------------------------------- #}
+<section class="block">
+  <header class="block-head"><h2>Autonomie par projet — reste à faire dev ÷ capacité dev planifiée</h2></header>
+  <details class="help"><summary>Comment lire</summary>
+    <p><b>Reste à faire dev</b> = Σ (dev_time − heures pointées par les développeurs) sur les tickets dev vivants du projet. <b>Dev planifié/sem.</b> = allocation {{ dev_roles | join(', ') }} moyenne sur la période à venir. <b>Autonomie</b> = semaines nécessaires au rythme planifié. <b>Aucun dev planifié</b> = du travail engagé chez un client sans personne pour le faire : la case à regarder.</p>
+  </details>
+  {% if not runway %}<p class="note">Aucun reste à faire dev et aucune allocation dev sur la période.</p>{% else %}
+  <div class="table-wrap"><table class="grid-table">
+    <thead><tr><th>Projet</th><th class="num">Reste à faire dev</th><th class="num">Dev planifié/sem.</th><th class="wide">Autonomie</th></tr></thead>
+    <tbody>
+    {% for r in runway %}
+      <tr class="{{ 'alert' if r.state == 'none' }}">
+        <td>{{ r.project }}</td><td class="num">{{ '%.1f' % r.left }} h</td><td class="num">{{ '%.1f' % r.per_week }} h</td>
+        <td>{% if r.state == 'none' %}<span class="badge err"><i></i>aucun dev planifié</span>
+          {% elif r.state == 'done' %}<span class="badge ok"><i></i>à jour</span>
+          {% elif r.state == 'idle' %}<span class="muted">—</span>
+          {% else %}<span class="leftbar"><span style="width: {{ r.bar }}%"></span></span> <b>{{ '%.1f' % r.weeks }} sem.</b>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
+
+{# --- 5. Adhérence ----------------------------------------------------------- #}
+<section class="block">
+  <header class="block-head">
+    <h2>Adhérence — planifié vs réel par projet ({{ past_span }})</h2>
+    <div class="legend"><span><i class="sw plan"></i>planifié</span><span><i class="sw billable"></i>pointé</span></div>
+  </header>
+  <details class="help"><summary>Comment lire</summary>
+    <p>Planifié = jours d'allocation × 8 h. Les écarts sont <b>constatés, pas jugés</b> : le plan est indicatif, et le hors-plan est le plus souvent du support ou de l'interne que le plan n'a jamais couvert. « sur 2 des 5 semaines » = le nombre de semaines où un plan existait : un gros écart sur peu de semaines couvertes, c'est un plan absent, pas un développeur qui a dévié. Au-delà de {{ unplanned_rows }} projets hors plan, la traîne est sommée.</p>
+  </details>
+  {% for a in adherence %}
+  <details class="dev-card" {{ 'open' if single }}>
+    <summary><b>{{ a.name }}</b> <span class="muted">— {{ hrs(a.capacity) }} de capacité nette · {{ hrs(a.plan_total) }} planifiées ({{ '%g' % (a.plan_days | round(1)) }} j{% if not a.pool %} sur {{ a.planned_weeks }} des {{ a.n_weeks }} semaines{% endif %}) · {{ '%.1f' % a.act_total }} h pointées{% if a.pool %} · <i>renfort : pas d'allocation par conception</i>{% endif %}</span></summary>
+    {% if a.empty %}<p class="note">Rien de planifié, rien de pointé.</p>{% else %}
+    <div class="two-col">
+      {% if a.planned_rows %}
+      <div>
+        <h3>Projets planifiés</h3>
+        <div class="table-wrap"><table class="compact">
+          <thead><tr><th>Projet</th><th class="wide">Planifié vs pointé</th><th class="num">Écart</th></tr></thead>
+          <tbody>{% for p in a.planned_rows %}
+            <tr><td>{{ p.project }}</td>
+              <td><span class="pair"><span class="plan" style="width: {{ p.planned_w }}%" data-tip="Planifié · {{ '%.0f' % p.planned }} h"></span><span class="done" style="width: {{ p.logged_w }}%" data-tip="Pointé · {{ '%.1f' % p.logged }} h"></span></span>
+                <div class="sub">{{ '%.0f' % p.planned }} h planifiées · {{ '%.1f' % p.logged }} h pointées</div></td>
+              <td class="num">{% if p.no_project %}<span class="badge warn"><i></i>créneau sans projet</span>{% else %}<b class="{{ 'ok-txt' if p.delta >= 0 else 'err-txt' }}">{{ '%+.1f' % p.delta }} h</b>{% endif %}</td></tr>
+          {% endfor %}</tbody>
+        </table></div>
+      </div>
+      {% endif %}
+      {% for g in a.unplanned %}
+      <div>
+        <h3>Hors plan — {{ 'client' if g.client else 'interne' }}</h3>
+        <div class="table-wrap"><table class="compact">
+          <thead><tr><th>Projet</th><th class="num">Pointé</th></tr></thead>
+          <tbody>{% for u in g.rows %}<tr><td>{{ u.project }}</td><td class="num">{{ '%.1f' % u.hours }} h</td></tr>{% endfor %}
+          {% if g.extra_n %}<tr><td class="muted">+{{ g.extra_n }} autres projets</td><td class="num">{{ '%.1f' % g.extra_h }} h</td></tr>{% endif %}</tbody>
+        </table></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </details>
+  {% endfor %}
+</section>
+
+{# --- 6. Qualité des données --------------------------------------------------- #}
+<section class="block">
+  <header class="block-head"><h2>Qualité des données</h2>
+    <div class="legend"><span>⚠️ rend un chiffre moins fiable</span><span>ℹ️ contexte de lecture</span></div></header>
+  <ul class="notes">{% for n in notes %}<li class="{{ 'warn' if n.warn }}">{{ n.html | safe }}</li>{% endfor %}</ul>
+</section>

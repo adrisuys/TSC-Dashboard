@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}DEV TSC{% endblock %}</title>
+{# Installable as an app: the manifest is what Chrome's install button reads,
+   the apple-* tags are what iOS uses for "Sur l'écran d'accueil". #}
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#1a56db">
+<meta name="application-name" content="DEV TSC">
+<meta name="description" content="Le travail, la capacité, les feuilles de temps et les délais de l'équipe DEV.">
+<link rel="icon" href="/static/icons/icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/static/icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DEV TSC">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+{# The reports' own stylesheet first, so every table that works on the static
+   page works here unchanged; the app's shell styles override it after. #}
+<style>{{ content_css | safe }}</style>
+<link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+<script src="/static/htmx.min.js?v={{ asset_v }}" defer></script>
+<script src="/static/app.js?v={{ asset_v }}" defer></script>
+<script>
+  // Registered on load so it never competes with the first render. A failure
+  // is not worth a console error: the app works fine without a worker, it is
+  // only the offline card and the install button that need it.
+  if ("serviceWorker" in navigator) {
+    addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
+</script>
+</head>
+<body>
+{# position: fixed, not sticky: iOS 27 blurs the top of a home-screen app
+   unless a fixed, opaque element sits there (>= 6px high, >= 80% wide,
+   within 4px of the top); the page is padded by its height (app.js). #}
+<header class="topbar">
+  <a class="brand" href="/">
+    <span class="logo">DEV TSC</span>
+    <span class="date">{{ today }}</span>
+  </a>
+  <div class="actions">
+    {% include "_status.html" %}
+    <button type="button" class="resync" hx-post="/resync" hx-target="#status"
+            hx-swap="outerHTML" hx-disabled-elt="this">
+      <span class="spin" aria-hidden="true">⟳</span>
+      <span class="idle">Resynchroniser</span>
+      <span class="busy">Resynchronisation…</span>
+    </button>
+  </div>
+</header>
+{% block nav %}{% endblock %}
+<main id="pane">
+{% block content %}{% endblock %}
+</main>
+<div id="scrim" hidden></div>
+<aside id="drawer" aria-label="Détail des lignes" hidden>
+  <div class="drawer-bar">
+    <span class="drawer-title">Détail des lignes</span>
+    <a id="drawer-open" href="#" target="_blank" rel="noopener" title="Ouvrir dans un onglet">↗</a>
+    <button type="button" id="drawer-close" aria-label="Fermer">✕</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+</body>
+</html>

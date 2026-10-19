@@ -1,0 +1,5 @@
+# The local web app (dev_webapp.py). Everything else in this folder is
+# standard library only. Installed into a dedicated venv by install_schedule.py.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+jinja2>=3.1,<4

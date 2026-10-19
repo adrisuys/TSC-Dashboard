@@ -1,0 +1,4 @@
+{# An htmx tab switch: the pane, plus the nav redrawn out of band so the
+   selected tab follows. #}
+{% with oob = true %}{% include "_nav.html" %}{% endwith %}
+{% include "_tab.html" %}
