@@ -35,7 +35,6 @@ DEFAULTS = {
         "Adam Tangiev",
         "Nathan Giacomello",
         "David Andrian",
-        "Michael Michot",
     ],
     # Two distinct stages are both named "En cours"; match them by id.
     "stage_encours_ids": [420, 665],
