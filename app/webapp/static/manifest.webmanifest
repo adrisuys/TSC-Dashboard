@@ -2,16 +2,19 @@
   "id": "/",
   "name": "DEV TSC",
   "short_name": "DEV TSC",
-  "description": "Le travail, la capacité, les feuilles de temps et les délais de l'équipe DEV, lus en direct dans Odoo.",
+  "description": "Vue d'ensemble de l'équipe DEV — tickets, disponibilités, facturable et feuilles de temps, lus en direct dans Odoo.",
   "lang": "fr",
   "dir": "ltr",
-  "start_url": "/travail",
+  "start_url": "/apercu",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#1a56db",
   "background_color": "#ffffff",
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
@@ -40,24 +43,44 @@
   ],
   "shortcuts": [
     {
-      "name": "Le travail",
+      "name": "Vue d'ensemble",
+      "url": "/apercu",
+      "icons": [
+        {
+          "src": "/static/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Tickets",
       "url": "/travail",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/static/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
-      "name": "Capacité",
+      "name": "Disponibilité",
       "url": "/capacite",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/static/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
-      "name": "Feuilles de temps",
+      "name": "Facturable & feuilles",
       "url": "/temps",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Délais",
-      "url": "/delais",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/static/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
