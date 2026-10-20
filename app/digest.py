@@ -159,7 +159,7 @@ def notify_failure_once(status, what="digest"):
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
-def chrome_reuse_window(urls, focus=True):
+def chrome_reuse_window(urls, focus=True, goto=None):
     """True if a Chrome window already shows the digest — reloaded in place.
 
     Chrome opens a NEW window for every `--app=` invocation and the digest is
@@ -173,7 +173,13 @@ def chrome_reuse_window(urls, focus=True):
     `activate`. That is what a page rebuilt every half hour needs: raising the
     window is welcome once in the morning and an interruption by 14:30, and a
     background reload leaves the page fresh for whenever it is next looked at.
-    Chrome does reload a tab in an unfocused window, so nothing is deferred."""
+    Chrome does reload a tab in an unfocused window, so nothing is deferred.
+
+    `goto` sends the tab to that URL instead of reloading it where it stands —
+    the web app opened on purpose starts on its home page (the overview), not
+    on whichever tab the window was left on. Only with `focus`: a background
+    refresh must never pull the reader off the tab they are on."""
+    action = (f'set URL of t to "{goto}"' if goto and focus else "reload")
     tests = " or ".join('(u starts with "%s")' % u for u in sorted(urls))
     raise_window = """
                     try
@@ -187,7 +193,7 @@ def chrome_reuse_window(urls, focus=True):
             repeat with t in tabs of w
                 set u to URL of t
                 if {tests} then
-                    tell t to reload{raise_window}
+                    tell t to {action}{raise_window}
                     return "yes"
                 end if
             end repeat
@@ -204,11 +210,12 @@ def chrome_reuse_window(urls, focus=True):
 
 
 def open_url_app(url, focus=True):
-    """Show an http page (the local web app) in a Chrome app window: reload the
-    one already showing it — any page of it, matched on the URL prefix — or
-    open a new one. Same contract as `open_in_browser` for `focus=False`."""
+    """Show an http page (the local web app) in a Chrome app window: the one
+    already showing it — any page of it, matched on the URL prefix — is sent
+    back to `url` (reloaded in place when `focus=False`), or a new one opens.
+    Same contract as `open_in_browser` for `focus=False`."""
     if sys.platform == "darwin" and os.path.exists(CHROME):
-        if chrome_reuse_window({url}, focus=focus):
+        if chrome_reuse_window({url}, focus=focus, goto=url):
             return True
         if not focus:
             return False
