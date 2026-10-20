@@ -24,6 +24,22 @@
 <script src="/static/htmx.min.js?v={{ asset_v }}" defer></script>
 <script src="/static/app.js?v={{ asset_v }}" defer></script>
 <script>
+  // An installed app (iOS home screen, Chrome app window) starts on the
+  // overview. iOS keeps the start_url it saw when the icon was added — an old
+  // icon still says /travail — so the manifest alone cannot fix it: the first
+  // page of a launch is sent to /apercu here, before anything renders. Only
+  // once per session, so a reload or a deliberate tab stays where it is, and
+  // never when the URL aims at a section (#…).
+  (function () {
+    var installed = navigator.standalone ||
+      (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+    if (!installed) return;
+    try {
+      if (sessionStorage.getItem("launched")) return;
+      sessionStorage.setItem("launched", "1");
+    } catch (e) { return; }
+    if (location.pathname !== "/apercu" && !location.hash) location.replace("/apercu");
+  })();
   // Registered on load so it never competes with the first render. A failure
   // is not worth a console error: the app works fine without a worker, it is
   // only the offline card and the install button that need it.
