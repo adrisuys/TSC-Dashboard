@@ -46,7 +46,12 @@
   // padded by its real height, which changes with the safe area and wrapping.
   var bar = document.querySelector('.topbar');
   function fitBar() {
-    document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+    var root = document.documentElement.style;
+    root.setProperty('--topbar-h', bar.offsetHeight + 'px');
+    // The sticky tab row sits under it on a wide screen (on a phone it is a
+    // bottom bar, and the CSS ignores this value there).
+    var tabs = document.getElementById('tabs');
+    if (tabs) root.setProperty('--tabs-h', tabs.offsetHeight + 'px');
   }
   if (bar) {
     fitBar();

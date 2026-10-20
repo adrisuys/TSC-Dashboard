@@ -402,6 +402,11 @@ td.who { min-width: 9rem; max-width: 16rem; }
 .callout.err-box { background: var(--band-err); border-left-color: var(--err); }
 
 
+/* A jump to a section (#tenue, a developer card…) must land below the fixed
+   top bar *and* the sticky tab row, not underneath them. --tabs-h is the
+   tab row's measured height (app.js). */
+.dev-card, .block, [id] { scroll-margin-top: calc(var(--topbar-h, 4rem) + var(--tabs-h, 3.4rem) + .8rem); }
+
 /* Phone: the tabs moved to the bottom, so a jump only clears the top bar. */
 @media (max-width: 700px) {
   .dev-card, .block, [id] { scroll-margin-top: calc(var(--topbar-h, 4rem) + .8rem); }
