@@ -27,12 +27,15 @@
     {% endif %}
 
     {% if c.grid %}
+    <div class="ov-ahead-wrap">
     <table class="compact ov-ahead">
       <thead><tr><th></th>{% for l in c.grid.labels %}<th class="num">{{ l }}</th>{% endfor %}</tr></thead>
       <tbody>{% for r in c.grid.rows %}<tr><td>{{ r.name }}</td>
-        {% for cell in r.cells %}<td class="num">{% if r.pool %}<span class="muted">renfort</span>{% else %}<span class="free {{ 'ok' if cell.free >= 1 else 'none' }}" data-tip="{{ '%.1f' % cell.free }} j libres sur {{ '%.1f' % cell.available }}">{{ '%.1f' % cell.free if cell.free >= 0.05 else '—' }}</span>{% endif %}</td>{% endfor %}
+        {% if r.pool %}<td class="pool" colspan="{{ c.grid.labels | length }}"><span class="muted">renfort</span></td>
+        {% else %}{% for cell in r.cells %}<td class="num"><span class="free {{ 'ok' if cell.free >= 1 else 'none' }}" data-tip="{{ '%.1f' % cell.free }} j libres sur {{ '%.1f' % cell.available }}">{{ '%.1f' % cell.free if cell.free >= 0.05 else '—' }}</span></td>{% endfor %}{% endif %}
       </tr>{% endfor %}</tbody>
     </table>
+    </div>
     {% endif %}
 
     {% if c["items"] %}

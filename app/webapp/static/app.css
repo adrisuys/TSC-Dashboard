@@ -458,7 +458,11 @@ td.who { min-width: 9rem; max-width: 16rem; }
 .ov-items { margin: .2rem 0 0; padding-left: 1.1rem; font-size: .86rem; display: flex; flex-direction: column; gap: .2rem; }
 .ov-items li.is-warn::marker { color: var(--warn); } .ov-items li.is-err::marker { color: var(--err); }
 .ov-items a { color: inherit; }
+.ov-card { min-width: 0; }
+.ov-ahead-wrap { overflow-x: auto; max-width: 100%; }
 .ov-ahead { width: 100%; font-size: .85rem; }
+.ov-ahead.compact th, .ov-ahead.compact td { padding: .35rem .4rem; }
+.ov-ahead td.pool { text-align: center; }
 .ov-ahead .free.ok { color: var(--ok); font-weight: 600; }
 .ov-ahead .free.none { color: var(--muted); }
 .ov-card footer { margin-top: auto; padding-top: .4rem; }
