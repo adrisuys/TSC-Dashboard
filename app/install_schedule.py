@@ -97,6 +97,12 @@ def sync_runner():
     if os.path.isdir(web):
         shutil.rmtree(web)          # a template deleted upstream must go too
     shutil.copytree(os.path.join(SOURCE, "webapp"), web)
+    # The timesheet engine behind "Ma feuille de temps" (dev_feuille.py).
+    engine = os.path.join(RUNNER, "timesheet")
+    if os.path.isdir(engine):
+        shutil.rmtree(engine)
+    shutil.copytree(os.path.join(SOURCE, "timesheet"), engine,
+                    ignore=shutil.ignore_patterns("__pycache__", "tests"))
     return RUNNER
 
 

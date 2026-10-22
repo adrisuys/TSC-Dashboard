@@ -1,0 +1,73 @@
+{# Tab "Ma feuille de temps" — the tsc-timesheet review page, inside the app.
+   Context from dev_feuille.context(). The page fills itself from the tab's
+   JSON API (static/feuille.js), only for a browser on the Mac that runs the
+   app; elsewhere it says where to open it. Hidden on phones and tablets. #}
+<p class="phone-only feuille-note">La feuille de temps se remplit depuis un ordinateur.</p>
+
+<div class="desktop-only-block">
+{% if not local %}
+  <div class="callouts">
+    <div class="callout">
+      <b>Disponible uniquement sur le Mac qui héberge l'application.</b>
+      La feuille est reconstruite à partir des traces de ce Mac (sessions Claude Code,
+      historique Chrome, commits git) et elle écrit dans Odoo : elle n'est donc pas
+      servie à travers le tailnet. Ouvrez <a href="{{ local_url }}">{{ local_url }}</a>
+      sur ce Mac-là.
+    </div>
+  </div>
+{% else %}
+<div id="feuille" data-token="{{ token }}" data-odoo="{{ odoo_url }}" data-today="{{ today }}">
+  <header class="fs-head">
+    <h2>Ma feuille de temps</h2>
+    <div class="fs-nav">
+      <button type="button" class="fs-btn" data-fs="prev" title="Jour précédent" aria-label="Jour précédent">◀</button>
+      <input type="date" class="fs-date">
+      <button type="button" class="fs-btn" data-fs="next" title="Jour suivant" aria-label="Jour suivant">▶</button>
+      <button type="button" class="fs-btn" data-fs="today">Aujourd'hui</button>
+      <button type="button" class="fs-btn" data-fs="rebuild" title="Relire les sessions Claude, l'historique Chrome et les commits">Reconstruire depuis les traces</button>
+    </div>
+    <div class="fs-sources"></div>
+    <span class="muted fs-built"></span>
+  </header>
+  <div class="fs-notices"></div>
+
+  <section class="block">
+    <header class="block-head"><h2>Tickets</h2>
+      <span class="muted">Description en anglais, comme dans Odoo · arrondi au ¼ h supérieur</span></header>
+    <div class="fs-table-wrap"><table class="fs-table">
+      <thead><tr><th></th><th>Heures</th><th>Tâche</th><th>Description</th><th>Quand</th><th>Traces</th></tr></thead>
+      <tbody class="fs-tickets"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section class="block">
+    <header class="block-head"><h2>Hors ticket</h2>
+      <span class="muted">Jamais poussé : à encoder vous-même sur le bon projet</span></header>
+    <div class="fs-buckets"></div>
+  </section>
+
+  <section class="block">
+    <header class="block-head"><h2>Déjà dans Odoo ce jour-là</h2></header>
+    <div class="fs-table-wrap"><table class="fs-table">
+      <thead><tr><th class="num">Heures</th><th>Tâche</th><th>Projet</th><th>Description</th></tr></thead>
+      <tbody class="fs-logged"></tbody>
+    </table></div>
+  </section>
+
+  <div class="fs-bar">
+    <span>Sélection : <b class="num fs-sel-hours">0</b> h sur <b class="fs-sel-count">0</b> ligne(s)</span>
+    <span class="muted">· tickets proposés <span class="num fs-all-hours">0</span> h
+      · total tracé <span class="num fs-tracked-hours">0</span> h
+      · déjà encodé <span class="num fs-logged-hours">0</span> h</span>
+    <span class="fs-grow"></span>
+    <span class="fs-confirm" hidden>
+      <span>Créer <b class="fs-confirm-count"></b> ligne(s) de feuille de temps dans Odoo ?</span>
+      <button type="button" class="fs-btn" data-fs="confirm-no">Annuler</button>
+      <button type="button" class="fs-btn primary" data-fs="confirm-yes">Pousser</button>
+    </span>
+    <button type="button" class="fs-btn primary" data-fs="push">Pousser la sélection vers Odoo</button>
+  </div>
+  <div class="fs-toast" hidden></div>
+</div>
+{% endif %}
+</div>

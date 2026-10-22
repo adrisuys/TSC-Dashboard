@@ -476,3 +476,69 @@ details.fold > summary::before { content: "▸"; color: var(--link); }
 details.fold[open] > summary::before { content: "▾"; }
 details.fold > summary h2 { display: inline; margin: 0; }
 details.fold > .block { margin-top: .8rem; }
+
+/* --- Ma feuille de temps (tab 4) — desktop only ---------------------------- */
+/* Hidden on phones and tablets: the tab in the bar and the page itself (an
+   old bookmark still opens it; it then says to use a computer). */
+.phone-only { display: none; }
+@media (max-width: 700px), (hover: none) and (pointer: coarse) {
+  .tab.desktop-only, .desktop-only-block { display: none !important; }
+  .phone-only { display: block; }
+}
+.feuille-note { color: var(--muted); }
+.fs-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-bottom: .6rem; }
+.fs-head h2 { margin: 0 .4rem 0 0; font-size: 1.2rem; }
+.fs-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.fs-btn { font: inherit; font-size: .88rem; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: .35rem .75rem; cursor: pointer; }
+.fs-btn:hover:not(:disabled) { background: var(--head); }
+.fs-btn:disabled { opacity: .5; cursor: default; }
+.fs-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.fs-btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+#feuille input[type=date], #feuille input[type=text], #feuille input[type=number] {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: .3rem .5rem; }
+.fs-sources { display: flex; gap: .35rem; flex-wrap: wrap; }
+.fs-chip { background: var(--head); border-radius: 999px; padding: .1rem .6rem; font-size: .78rem; color: var(--muted); }
+.fs-chip.ok::before { content: "● "; color: var(--ok); }
+.fs-chip.bad::before { content: "● "; color: var(--err); }
+.fs-notice { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px;
+  padding: .45rem .75rem; margin: .35rem 0; font-size: .86rem; }
+.fs-notice.err { border-left-color: var(--err); }
+#feuille .block { margin: 1.2rem 0 1.6rem; }
+.fs-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table.fs-table { width: 100%; min-width: 860px; margin: 0; border: 0; }
+table.fs-table td { vertical-align: top; }
+table.fs-table tr.pushed td { color: var(--muted); background: color-mix(in srgb, var(--ok) 7%, transparent); }
+.fs-hours input { width: 4.6rem; text-align: right; }
+.fs-desc input { width: 100%; min-width: 14rem; }
+.fs-task a { color: var(--fg); font-weight: 600; }
+.fs-small { font-size: .78rem; }
+.fs-badge { display: inline-block; font-size: .72rem; border-radius: 4px; padding: 0 .4rem; margin: .2rem .3rem 0 0;
+  background: var(--head); color: var(--muted); }
+.fs-badge.ok { color: var(--ok); } .fs-badge.warn { color: var(--warn); }
+.fs-edit { display: inline-flex; vertical-align: -2px; margin-left: .3rem; padding: 2px; border-radius: 4px; color: var(--muted); }
+.fs-edit:hover { color: var(--accent); background: var(--head); }
+.fs-edit svg { width: 14px; height: 14px; pointer-events: none; }
+.fs-picker input { width: 100%; min-width: 14rem; }
+.fs-picker + .fs-picker { margin-top: .25rem; }
+/* fixed, not absolute: the table's scroll container would clip it */
+.fs-results { position: fixed; z-index: 40; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; max-height: 260px; overflow: auto; box-shadow: var(--shadow); }
+.fs-results div { padding: .35rem .55rem; cursor: pointer; }
+.fs-results div:hover { background: var(--head); }
+#feuille details summary { cursor: pointer; color: var(--muted); font-size: .78rem; }
+.fs-ev { font-size: .78rem; color: var(--muted); margin: .25rem 0 0; padding: 0; list-style: none; max-width: 40rem; }
+.fs-ev li { margin: .1rem 0; white-space: pre-wrap; word-break: break-word; }
+.fs-ev .t { font-variant-numeric: tabular-nums; color: var(--fg); }
+.fs-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .7rem; }
+.fs-bucket { padding: .7rem .9rem; }
+.fs-bucket-h { display: flex; justify-content: space-between; font-weight: 600; }
+/* The action bar stays in view at the bottom of the window while scrolling. */
+.fs-bar { position: sticky; bottom: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center;
+  gap: .5rem .9rem; padding: .7rem 1rem; margin: 0 -1rem; background: var(--bg);
+  border-top: 1px solid var(--line); font-size: .9rem; }
+.fs-grow { flex: 1; }
+.fs-confirm:not([hidden]) { display: inline-flex; gap: .5rem; align-items: center; }
+.fs-toast { position: fixed; right: 1rem; bottom: 4.5rem; z-index: 50; background: var(--fg); color: var(--bg);
+  padding: .5rem .9rem; border-radius: 8px; font-size: .86rem; }

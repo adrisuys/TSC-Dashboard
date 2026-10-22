@@ -6,14 +6,15 @@
   "travail": '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.2 1.2L7 4.8M3.5 12l1.2 1.2L7 10.8M3.5 18l1.2 1.2L7 16.8"/>',
   "capacite": '<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5.2 6-5.2s5.4 1.9 6 5.2"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.4c2.4.2 4 1.9 4.5 4.6"/>',
   "temps": '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  "feuille": '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/>',
 } %}
-{% set short = {"apercu": "Aperçu", "travail": "Tickets", "capacite": "Dispo", "temps": "Temps"} %}
+{% set short = {"apercu": "Aperçu", "travail": "Tickets", "capacite": "Dispo", "temps": "Temps", "feuille": "Ma feuille"} %}
 <nav id="tabs" class="tabs" role="tablist"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for key, label in tabs %}
   <a role="tab" href="/{{ key }}" hx-get="/{{ key }}" hx-target="#pane"
      hx-push-url="true" aria-selected="{{ 'true' if key == active else 'false' }}"
      aria-label="{{ label }}"
-     class="tab{% if key == active %} active{% endif %}">
+     class="tab{% if key == active %} active{% endif %}{% if key in (desktop_only or ()) %} desktop-only{% endif %}">
     <span class="num">{{ loop.index }}</span>
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">{{ icons.get(key, '') | safe }}</svg>
     <span class="label">{{ label }}</span>

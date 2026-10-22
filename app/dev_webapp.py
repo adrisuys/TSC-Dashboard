@@ -37,6 +37,7 @@ from contextlib import asynccontextmanager
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_config  # noqa: E402
 import dev_capacite_view  # noqa: E402
+import dev_feuille  # noqa: E402
 import dev_apercu_view  # noqa: E402
 import dev_capacity_report  # noqa: E402
 import dev_periods  # noqa: E402
@@ -68,8 +69,13 @@ RETRY_SECONDS = 10
 # that details it. (The delays tab is gone: the overview flags the tickets
 # stuck in their stage; `dev_stats_report` still runs on its own.)
 TABS = [("apercu", "Vue d'ensemble"), ("travail", "Tickets"),
-        ("capacite", "Disponibilité"), ("temps", "Facturable & feuilles")]
+        ("capacite", "Disponibilité"), ("temps", "Facturable & feuilles"),
+        (dev_feuille.KEY, "Ma feuille de temps")]
 TAB_KEYS = [k for k, _l in TABS]
+# Tabs left out of the phone/tablet tab bar (app.css hides them there): the
+# timesheet review is a wide editing table, and it only works on the Mac
+# that runs the app anyway (dev_feuille).
+DESKTOP_ONLY = {dev_feuille.KEY}
 
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
@@ -235,8 +241,16 @@ def render_apercu(request):
     return templates.get_template("apercu.html").render(**vm)
 
 
+def render_feuille(request):
+    """Tab 4 — my timesheet. Nothing cached: the page loads the day from its
+    own API (dev_feuille), which reads local traces and Odoo on demand."""
+    return templates.get_template("feuille.html").render(
+        **dev_feuille.context(request, digest_config.RESYNC_PORT))
+
+
 NATIVE = {"apercu": render_apercu, "travail": render_travail,
-          "capacite": render_capacite, "temps": render_temps}
+          "capacite": render_capacite, "temps": render_temps,
+          dev_feuille.KEY: render_feuille}
 
 
 def default_items():
@@ -369,6 +383,7 @@ async def lifespan(_app):
 app = FastAPI(title="DEV TSC", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(WEB, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(WEB, "templates"))
+app.include_router(dev_feuille.router)
 
 
 def _is_htmx(request):
@@ -383,7 +398,8 @@ def _asset_version():
 
 
 def _page_ctx(request, active):
-    return {"request": request, "tabs": TABS, "active": active, "store": store,
+    return {"request": request, "tabs": TABS, "desktop_only": DESKTOP_ONLY,
+            "active": active, "store": store,
             "today": date_fr(datetime.date.today()), "content_css": md_to_html.CSS,
             "asset_v": _asset_version()}
 
