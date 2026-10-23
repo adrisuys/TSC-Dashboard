@@ -19,7 +19,7 @@
     <ul class="ov-people">
       {% for p in c.people %}
       <li><span class="name">{{ p.name }}</span>
-        {% if p.mark is defined %}<span class="meter"><span class="fill {{ p.state }}" style="width: {{ p.pct }}%"></span><span class="mark" style="left: {{ p.mark }}%"></span></span>
+        {% if p.mark is defined %}<span class="meter"><span class="fill {{ p.state }}" style="width: {{ p.pct }}%"></span>{% if p.mark is not none %}<span class="mark" style="left: {{ p.mark }}%"></span>{% endif %}</span>
         {% elif p.pct is defined %}<span class="leftbar"><span style="width: {{ p.pct }}%"></span></span>{% endif %}
         <b class="is-{{ p.state }}">{{ p.value }}</b></li>
       {% endfor %}

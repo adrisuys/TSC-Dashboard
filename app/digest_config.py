@@ -42,6 +42,13 @@ DEFAULTS = {
     # Developers who carry no project allocation on purpose: judged on
     # occupation, never on plan adherence.
     "pool_devs": ["Thomas Dieuzeide"],
+    # --- timesheet report (dev_timesheet_report.py) --------------------------
+    # Who the yearly billable target applies to: the employees of the Belgian
+    # company, and the company bonus is computed on them. David is employed in
+    # France, Thomas and Nathan are freelancers — their figures are still shown,
+    # for information, but they are never judged against the target nor counted
+    # in the figure that is.
+    "target_devs": ["Adrien Suys", "Adam Tangiev"],
     # Absences are timesheeted on this partner-less project, and public holidays
     # are pre-booked there in the future. hr.leave is NOT usable: a record rule
     # hides other people's leaves from an ordinary account.

@@ -149,11 +149,14 @@ def _band(pct):
 
 
 def facturable(tv_temps):
-    """Facturable — the team's badge (target / amber); the people below the
-    target and dropping are named, then billable work booked non-billable."""
+    """Facturable — the badge of the population the target applies to (the
+    Belgian employees, `cfg["target_devs"]`); the people below the target and
+    dropping are named, then billable work booked non-billable. Everyone else
+    is listed in neutral, for information."""
     f, nf = tv_temps["facturable"], tv_temps["non_facturable"]
-    t = f["team"]
-    state = {"none": "warn"}.get(_band(t["strict"]), _band(t["strict"]))
+    t = f["goal"] or f["team"]
+    state = ({"none": "warn"}.get(_band(t["strict"]), _band(t["strict"]))
+             if f["goal"] else "ok")
     leaks = sum(x["hours"] for x in nf["leaks"])
     items = [{"text": f"{w['name']} : {w['recent']:.0f} % sur {tv_temps['recent_days']} j",
               "meta": f"{w['delta']:+.1f} pts", "warn": True} for w in f["watch"]]
@@ -162,7 +165,9 @@ def facturable(tv_temps):
                               "typées non facturables", "meta": "à corriger",
                       "warn": True})
     proj = tv_temps["tendance"].get("projection")
-    sub = f"objectif {tv_temps['target']:.0f} % · {tv_temps['window_label']}"
+    sub = (f"🎯 {f['goal_label']} · objectif {tv_temps['target']:.0f} % · "
+           f"{tv_temps['window_label']}" if f["goal"]
+           else f"hors objectif · {tv_temps['window_label']}")
     if t["recent"] is not None and tv_temps["recent_days"]:
         sub += f" · {t['recent']:.0f} % sur {tv_temps['recent_days']} j"
     if proj and proj.get("needed") is not None:
@@ -174,11 +179,17 @@ def facturable(tv_temps):
         "value": "—" if t["strict"] is None else f"{t['strict']:.0f} %",
         "sub": sub,
         "lead": (f"Sous l'objectif et en recul : {', '.join(w['name'] for w in f['watch'])}"
-                 if f["watch"] else "Personne n'est à la fois sous l'objectif et en recul."),
-        "people": [{"name": r["name"],
+                 if f["watch"] else "Personne n'est à la fois sous l'objectif et en recul.")
+                + (f" Équipe entière : {f['team']['strict']:.0f} % (info)."
+                   if f["goal"] and f["others"] and f["team"]["strict"] is not None
+                   else ""),
+        # The ones under the target first; the others in neutral, no mark.
+        "people": [{"name": ("🎯 " if r["goal"] else "") + r["name"],
                     "value": "—" if r["strict"] is None else f"{r['strict']:.0f} %",
-                    "state": _band(r["strict"]), "pct": min(r["strict"] or 0, 100),
-                    "mark": tv_temps["target"]} for r in f["rows"]],
+                    "state": _band(r["strict"]) if r["goal"] else "none",
+                    "pct": min(r["strict"] or 0, 100),
+                    "mark": tv_temps["target"] if r["goal"] else None}
+                   for r in sorted(f["rows"], key=lambda r: not r["goal"])],
         "items": items,
     }
 

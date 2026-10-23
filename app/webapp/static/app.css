@@ -215,6 +215,7 @@ table.compact th { text-transform: none; letter-spacing: 0; font-size: .8rem; }
 .meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
 .meter .fill.ok { background: var(--ok); } .meter .fill.warn { background: var(--warn); }
 .meter .fill.err { background: var(--err); }
+.meter .fill.none { background: var(--muted); opacity: .55; }
 .meter .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg);
   opacity: .55; }
 
@@ -447,7 +448,7 @@ td.who { min-width: 9rem; max-width: 16rem; }
 .ov-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .ov-value.is-warn, .ov-people b.is-warn { color: var(--warn); }
 .ov-value.is-err, .ov-people b.is-err { color: var(--err); }
-.ov-people b.is-ok { color: var(--ok); } .ov-people b.is-full { color: var(--muted); }
+.ov-people b.is-ok { color: var(--ok); } .ov-people b.is-none { color: var(--muted); } .ov-people b.is-full { color: var(--muted); }
 .ov-lead { margin: .2rem 0 0; font-weight: 600; font-size: .9rem; }
 .ov-people { list-style: none; margin: .2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
 .ov-people li { display: grid; grid-template-columns: 9.5rem 1fr auto; align-items: center; gap: .6rem; font-size: .88rem; }

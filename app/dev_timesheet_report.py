@@ -60,6 +60,11 @@ TITLE = "DEV TSC — Feuilles de temps"
 # The team's own target, and the bands around it. 85 % is a management target,
 # not a derived figure: it lives here rather than in the config because changing
 # it changes what the page means, and that deserves a commit.
+#
+# It applies to `cfg["target_devs"]` only — the Belgian employees, on whom the
+# company bonus is computed. Everyone else is shown for information, never
+# coloured against the target and never counted in the figure that is: the
+# "Objectif" row, the verdict, the watch list, the trend and the projection.
 TARGET = 85.0
 AMBER_BELOW = 75.0
 
@@ -162,6 +167,11 @@ def pct_txt(value):
 
 def ratio(part, whole):
     return None if whole <= 0.05 else part / whole * 100.0
+
+
+def target_names(cfg):
+    """The developers the target applies to (see TARGET)."""
+    return set(cfg.get("target_devs") or [])
 
 
 def target_badge(value):
@@ -825,7 +835,9 @@ def section_facturable(ctx, cfg, states):
     print("| " + " | ".join(header) + " |")
     print("|" + "|".join(["---"] * len(header)) + "|")
 
+    goal_set = target_names(cfg)
     totals, rtotals = defaultdict(float), defaultdict(float)
+    gtotals, grtotals = defaultdict(float), defaultdict(float)
     watch = []
     for dev in ctx["devs"]:
         name = dev["name"]
@@ -836,6 +848,7 @@ def section_facturable(ctx, cfg, states):
         worked = bil + inv + internal
         strict, ex_inv = ratio(bil, worked), ratio(bil, bil + internal)
         trusted = states[name]["trusted"]
+        goal = name in goal_set
 
         rbil = ctx["recent"].get((name, "billable"), 0.0)
         rworked = rbil + ctx["recent"].get((name, "invest"), 0.0) \
@@ -849,49 +862,75 @@ def section_facturable(ctx, cfg, states):
                 totals[key] += value
             rtotals["billable"] += rbil
             rtotals["worked"] += rworked
+        if trusted and goal:
+            for key, value in (("billable", bil), ("invest", inv),
+                               ("internal", internal), ("leave", leave)):
+                gtotals[key] += value
+            grtotals["billable"] += rbil
+            grtotals["worked"] += rworked
             # Who to work with more closely: below target *now*, and going the
             # wrong way. Someone below target but climbing is already on it.
             if rstrict is not None and rstrict < TARGET and (delta or 0) <= -DELTA_FLOOR:
                 watch.append((delta, name, strict, rstrict))
 
-        flag = "" if trusted else " ⚠️"
+        flag = ("" if trusted else " ⚠️") + (" 🎯" if goal else "")
         cells = [f"{cap.cell(name)}{flag}", hd(bil), hd(internal), hd(inv),
                  hd(worked), hd(leave), pct_txt(strict), pct_txt(ex_inv)]
         if dual:
             cells += [pct_txt(rstrict), arrow]
         shown = rstrict if dual else strict
-        cells += [bar(shown), target_badge(shown)]
+        cells += [bar(shown), target_badge(shown) if goal else "hors objectif"]
         print("| " + " | ".join(cells) + " |")
 
-    tb, ti, tn = totals["billable"], totals["invest"], totals["internal"]
-    tworked = tb + ti + tn
-    t_strict, t_ex = ratio(tb, tworked), ratio(tb, tb + tn)
-    r_strict = (ratio(rtotals["billable"], rtotals["worked"])
-                if rtotals["worked"] >= RECENT_MIN_HOURS else None)
-    t_arrow, _t_delta = movement(t_strict, r_strict)
-    cells = ["**Équipe**", f"**{hd(tb)}**", f"**{hd(tn)}**", f"**{hd(ti)}**",
-             f"**{hd(tworked)}**", f"**{hd(totals['leave'])}**",
-             f"**{pct_txt(t_strict)}**", f"**{pct_txt(t_ex)}**"]
-    if dual:
-        cells += [f"**{pct_txt(r_strict)}**", f"**{t_arrow}**"]
-    shown = r_strict if dual else t_strict
-    cells += [bar(shown), target_badge(shown)]
-    print("| " + " | ".join(cells) + " |")
+    def total_row(label, tot, rtot, judged):
+        b, i, n = tot["billable"], tot["invest"], tot["internal"]
+        w = b + i + n
+        strict, ex = ratio(b, w), ratio(b, b + n)
+        recent = (ratio(rtot["billable"], rtot["worked"])
+                  if rtot["worked"] >= RECENT_MIN_HOURS else None)
+        arrow, _d = movement(strict, recent)
+        cells = [f"**{label}**", f"**{hd(b)}**", f"**{hd(n)}**", f"**{hd(i)}**",
+                 f"**{hd(w)}**", f"**{hd(tot['leave'])}**",
+                 f"**{pct_txt(strict)}**", f"**{pct_txt(ex)}**"]
+        if dual:
+            cells += [f"**{pct_txt(recent)}**", f"**{arrow}**"]
+        shown = recent if dual else strict
+        cells += [bar(shown), target_badge(shown) if judged else "info"]
+        print("| " + " | ".join(cells) + " |")
+        return b, i, n, w, strict, ex, recent
+
+    goal_devs = [d["name"] for d in ctx["devs"] if d["name"] in goal_set]
+    has_goal = bool(goal_devs)
+    if has_goal:
+        tb, ti, tn, tworked, t_strict, t_ex, r_strict = total_row(
+            "🎯 Objectif (" + ", ".join(n.split()[0] for n in goal_devs) + ")",
+            gtotals, grtotals, True)
+    if len(ctx["devs"]) > len(goal_devs) or not has_goal:
+        team = total_row("Équipe entière", totals, rtotals, False)
+        if not has_goal:
+            tb, ti, tn, tworked, t_strict, t_ex, r_strict = team
     print()
+    if goal_set:
+        others = [d["name"] for d in ctx["devs"] if d["name"] not in goal_set]
+        print(f"_🎯 L'objectif de {TARGET:.0f} % ne s'applique qu'aux employés "
+              f"belges ({', '.join(sorted(goal_set))}) — c'est sur lui que se "
+              f"calcule le bonus de société. "
+              + (f"{', '.join(others)} : chiffres affichés pour information, "
+                 f"hors objectif et hors de la ligne 🎯._\n" if others else "_\n"))
 
     excluded = [d["name"] for d in ctx["devs"] if not states[d["name"]]["trusted"]]
-    if t_strict is not None:
+    if t_strict is not None and has_goal:
         delta = t_strict - TARGET
         verdict = ("au-dessus de l'objectif" if delta >= 0
                    else f"il manque **{-delta:.1f} points**")
         # "l'équipe" is a lie when the run is filtered to one developer.
-        subject = (cap.cell(ctx["devs"][0]["name"]) if len(ctx["devs"]) == 1
-                   else "l'équipe")
+        subject = (cap.cell(goal_devs[0]) if len(goal_devs) == 1
+                   else "le périmètre de l'objectif")
         cost = (f" L'investissement interne pèse **{t_ex - t_strict:.1f} points** "
                 f"({hd(ti)}) : hors invest, {subject} est à **{t_ex:.0f} %**."
                 if t_ex is not None and ti > 0.05 else "")
         mis = sum(h for (n, _p), h in ctx["misfiled"].items()
-                  if states.get(n, {}).get("trusted"))
+                  if states.get(n, {}).get("trusted") and n in goal_set)
         hint = ""
         if tworked > 0.05 and mis / tworked >= MISFILED_FLOOR:
             fixed = ratio(tb, tworked - mis)
@@ -901,12 +940,12 @@ def section_facturable(ctx, cfg, states):
         print(f"> **Objectif — {ctx['window_label']} : {t_strict:.1f} % "
               f"facturable** sur {hd(tworked)} travaillées, pour un objectif de "
               f"{TARGET:.0f} % — {verdict}.{cost}{hint}\n")
-    if dual and r_strict is not None:
+    if dual and r_strict is not None and has_goal:
         way = ("mieux que" if r_strict > (t_strict or 0) + DELTA_FLOOR else
                "moins bien que" if r_strict < (t_strict or 0) - DELTA_FLOOR
                else "dans la ligne de")
-        who = (cap.cell(ctx["devs"][0]["name"]) if len(ctx["devs"]) == 1
-               else "l'équipe")
+        who = (cap.cell(goal_devs[0]) if len(goal_devs) == 1
+               else "le périmètre de l'objectif")
         print(f"> **Maintenant — {rd} derniers jours : {r_strict:.1f} %**, soit "
               f"{way} la moyenne {ctx['window_de']}. C'est ce chiffre-là "
               f"qui décrit {who} aujourd'hui ; celui du dessus décrit "
@@ -926,7 +965,7 @@ def section_facturable(ctx, cfg, states):
               f"pas comptées.\n")
 
 
-def section_tendance(ctx, states, fold=False):
+def section_tendance(ctx, cfg, states, fold=False):
     """B bis — the shape of the year, and whether it can still be recovered.
 
     The cumulative column is the one that answers the yearly target. A month at
@@ -934,10 +973,16 @@ def section_tendance(ctx, states, fold=False):
     first can still be averaged away, the second cannot. A row-by-row trend
     alone never says which of the two you are looking at."""
     monthly = ctx["monthly"]
-    # The same population as the team row above it. A trend that quietly counts
-    # a developer the table excludes prints a second, different answer to the
-    # one question the page exists to answer.
-    counted = {d["name"] for d in ctx["devs"] if states[d["name"]]["trusted"]}
+    # The same population as the 🎯 row above it. A trend that quietly counts
+    # a developer the target does not apply to prints a second, different
+    # answer to the one question the page exists to answer. Only when the run
+    # holds nobody the target applies to does it fall back to everyone shown —
+    # and then it says so.
+    goal_set = target_names(cfg)
+    counted = {d["name"] for d in ctx["devs"]
+               if states[d["name"]]["trusted"] and d["name"] in goal_set}
+    if not counted:
+        return
     keys = sorted({b for (b, _k, n) in ctx["buckets"] if n in counted})
     if not monthly:
         keys = keys[-TREND_MAX_WEEKS:]
@@ -945,7 +990,8 @@ def section_tendance(ctx, states, fold=False):
         return
     unit = "mois" if monthly else "semaines"
     with md_to_html.folded(f"Tendance — {len(keys)} {unit}", fold):
-        print("_Le ratio strict de l'équipe entière, congés exclus. **`Cumulé` est "
+        print("_Le ratio strict du périmètre de l'objectif (employés belges : "
+              f"{', '.join(sorted(counted))}), congés exclus. **`Cumulé` est "
               "la colonne qui compte** : c'est le ratio depuis le début de la "
               "fenêtre, donc la note de l'année à ce jour — un mois faible en "
               "février se rattrape encore, le même en novembre ne se rattrape plus. "
@@ -1341,7 +1387,7 @@ def render(ctx, cfg, fold=False):
     states = {d["name"]: fill_state(ctx, d["name"], cfg) for d in ctx["devs"]}
     section_tenue(ctx, cfg, states)
     section_facturable(ctx, cfg, states)
-    section_tendance(ctx, states, fold=fold)
+    section_tendance(ctx, cfg, states, fold=fold)
     section_non_facturable(ctx, fold=fold)
     section_conges_mal_pointes(ctx, states, fold=fold)
     section_notes(ctx, cfg, fold=fold)

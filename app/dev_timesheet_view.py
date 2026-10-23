@@ -13,6 +13,11 @@ never print two different answers to one question.
 team figures are then recomputed over that selection (still excluding an
 untrusted timesheet), so "l'équipe" reads as "the people shown".
 
+Two aggregates, never one: `goal` is the population the 85 % target applies to
+(`cfg["target_devs"]`, the Belgian employees — the company bonus is computed on
+them) and is the only one judged against it; `team` is everyone shown, for
+information. The trend and the year-end projection follow `goal`.
+
 Read-only, and no Odoo call of its own: everything comes from `ctx`.
 """
 import os
@@ -27,8 +32,10 @@ TREND_LIGHT_HOURS = 40.0     # same threshold as the report's "light period"
 NB_DEV_ROWS = r.NB_DEV_ROWS
 
 
-def _badge(value):
+def _badge(value, judged=True):
     """(css class, label) for a billable percentage against the target."""
+    if not judged:
+        return "muted", "hors objectif"
     if value is None:
         return "none", "—"
     if value >= r.TARGET:
@@ -101,8 +108,40 @@ def tenue(ctx, cfg, names, states):
             "team_coverage": r.ratio(tw, te), "team_worked": tw, "team_expected": te}
 
 
-def facturable(ctx, names, states):
-    rows, totals, rtotals, watch = [], defaultdict(float), defaultdict(float), []
+def _aggregate(ctx, names, states, misfiled_names, judged):
+    """Totals over the trusted ones among `names` — one total row."""
+    totals, rtotals = defaultdict(float), defaultdict(float)
+    for name in names:
+        if not states[name]["trusted"]:
+            continue
+        for key in ("billable", "invest", "internal", "leave"):
+            totals[key] += ctx["kinds"].get((name, key), 0.0)
+            if key != "leave":
+                rtotals["worked"] += ctx["recent"].get((name, key), 0.0)
+        rtotals["billable"] += ctx["recent"].get((name, "billable"), 0.0)
+    tb, ti, tn = totals["billable"], totals["invest"], totals["internal"]
+    tworked = tb + ti + tn
+    t_strict, t_ex = r.ratio(tb, tworked), r.ratio(tb, tb + tn)
+    r_strict = (r.ratio(rtotals["billable"], rtotals["worked"])
+                if rtotals["worked"] >= r.RECENT_MIN_HOURS else None)
+    t_arrow, t_delta = r.movement(t_strict, r_strict)
+    mis = sum(h for (n, _p), h in ctx["misfiled"].items()
+              if n in misfiled_names and states[n]["trusted"])
+    fixed = (r.ratio(tb, tworked - mis)
+             if tworked > 0.05 and mis / tworked >= r.MISFILED_FLOOR else None)
+    shown = r_strict if ctx["has_recent"] else t_strict
+    cls, label = _badge(shown, judged)
+    return {"billable": tb, "internal": tn, "invest": ti, "worked": tworked,
+            "leave": totals["leave"], "strict": t_strict, "ex_inv": t_ex,
+            "recent": r_strict, "arrow": t_arrow, "delta": t_delta,
+            "shown": shown, "badge": cls, "badge_label": label,
+            "split": _split(tb, tn, ti), "misfiled": mis, "fixed": fixed,
+            "invest_cost": (t_ex - t_strict) if (t_ex is not None and t_strict is not None
+                                                 and ti > 0.05) else None}
+
+
+def facturable(ctx, names, states, goal_set):
+    rows, watch = [], []
     for name in names:
         bil = ctx["kinds"].get((name, "billable"), 0.0)
         inv = ctx["kinds"].get((name, "invest"), 0.0)
@@ -116,43 +155,26 @@ def facturable(ctx, names, states):
         rstrict = r.ratio(rbil, rworked) if rworked >= r.RECENT_MIN_HOURS else None
         arrow, delta = r.movement(strict, rstrict)
         trusted = states[name]["trusted"]
-        if trusted:
-            for key, value in (("billable", bil), ("invest", inv),
-                               ("internal", internal), ("leave", leave)):
-                totals[key] += value
-            rtotals["billable"] += rbil
-            rtotals["worked"] += rworked
-            if rstrict is not None and rstrict < r.TARGET and (delta or 0) <= -r.DELTA_FLOOR:
-                watch.append({"name": name, "recent": rstrict, "delta": delta})
+        goal = name in goal_set
+        if trusted and goal and rstrict is not None and rstrict < r.TARGET \
+                and (delta or 0) <= -r.DELTA_FLOOR:
+            watch.append({"name": name, "recent": rstrict, "delta": delta})
         shown = rstrict if ctx["has_recent"] else strict
-        cls, label = _badge(shown)
+        cls, label = _badge(shown, goal)
         rows.append({"name": name, "billable": bil, "internal": internal,
                      "invest": inv, "worked": worked, "leave": leave,
                      "strict": strict, "ex_inv": ex_inv, "recent": rstrict,
                      "arrow": arrow, "delta": delta, "trusted": trusted,
-                     "shown": shown, "badge": cls, "badge_label": label,
-                     "split": _split(bil, internal, inv)})
-    tb, ti, tn = totals["billable"], totals["invest"], totals["internal"]
-    tworked = tb + ti + tn
-    t_strict, t_ex = r.ratio(tb, tworked), r.ratio(tb, tb + tn)
-    r_strict = (r.ratio(rtotals["billable"], rtotals["worked"])
-                if rtotals["worked"] >= r.RECENT_MIN_HOURS else None)
-    t_arrow, t_delta = r.movement(t_strict, r_strict)
-    mis = sum(h for (n, _p), h in ctx["misfiled"].items()
-              if n in names and states[n]["trusted"])
-    fixed = (r.ratio(tb, tworked - mis)
-             if tworked > 0.05 and mis / tworked >= r.MISFILED_FLOOR else None)
-    shown = r_strict if ctx["has_recent"] else t_strict
-    cls, label = _badge(shown)
-    team = {"billable": tb, "internal": tn, "invest": ti, "worked": tworked,
-            "leave": totals["leave"], "strict": t_strict, "ex_inv": t_ex,
-            "recent": r_strict, "arrow": t_arrow, "delta": t_delta,
-            "shown": shown, "badge": cls, "badge_label": label,
-            "split": _split(tb, tn, ti), "misfiled": mis, "fixed": fixed,
-            "invest_cost": (t_ex - t_strict) if (t_ex is not None and t_strict is not None
-                                                 and ti > 0.05) else None}
+                     "goal": goal, "shown": shown, "badge": cls,
+                     "badge_label": label, "split": _split(bil, internal, inv)})
+    goal_names = [n for n in names if n in goal_set]
+    team = _aggregate(ctx, names, states, names, False)
+    goal = _aggregate(ctx, goal_names, states, goal_names, True) if goal_names else None
     watch.sort(key=lambda w: w["delta"])
-    return {"rows": rows, "team": team, "watch": watch,
+    return {"rows": rows, "team": team, "goal": goal, "goal_names": goal_names,
+            "goal_label": ", ".join(n.split()[0] for n in goal_names),
+            "others": [n for n in names if n not in goal_set],
+            "watch": watch,
             "excluded": [row["name"] for row in rows if not row["trusted"]]}
 
 
@@ -167,6 +189,8 @@ def _split(bil, internal, inv):
 
 
 def tendance(ctx, names, states):
+    """Over `names` — the target population, so the cumulative line and the
+    projection answer the same question as the 🎯 row."""
     counted = {n for n in names if states[n]["trusted"]}
     monthly = ctx["monthly"]
     keys = sorted({b for (b, _k, n) in ctx["buckets"] if n in counted})
@@ -185,7 +209,7 @@ def tendance(ctx, names, states):
                        "light": worked < TREND_LIGHT_HOURS,
                        "partial": i == len(keys) - 1})
     proj = (r.projection_numbers(ctx, run_bil, run_worked)
-            if run_worked > 0.05 else None)
+            if run_worked > 0.05 and points else None)
     return {"points": points, "unit": "mois" if monthly else "semaines",
             "projection": proj, "chart": _chart(points)}
 
@@ -331,9 +355,10 @@ def build(ctx, cfg, devs=None):
     names = [n for n in all_names if not devs or n in devs] or all_names
     states = {n: r.fill_state(ctx, n, cfg) for n in all_names}
     rd = ctx["recent_days"] if ctx["has_recent"] else None
-    fact = facturable(ctx, names, states)
+    goal_set = r.target_names(cfg)
+    fact = facturable(ctx, names, states, goal_set)
     ten = tenue(ctx, cfg, names, states)
-    trend = tendance(ctx, names, states)
+    trend = tendance(ctx, fact["goal_names"], states)
     return {
         "names": names, "all_names": all_names, "single": len(names) == 1,
         "target": r.TARGET, "amber": r.AMBER_BELOW,
