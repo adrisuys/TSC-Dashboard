@@ -110,12 +110,18 @@ def build_lines(intervals, cfg, tasks, day_start, day_end):
         spans.append((start, end, key))
         by_key[key].append(iv)
     seconds = share_time(spans, split=cfg["overlap"] == "split")
+    # The "not real work" floor is judged on the activity's own duration, not
+    # on its share: with three sessions open side by side, six minutes on a
+    # ticket keep only two after the split, and the ticket would vanish from
+    # the day although it was genuinely worked on. The share still sets the
+    # hours (rounded up), so the day is never counted twice.
+    own = share_time(spans, split=False)
     step = cfg["rounding_minutes"]
     tz = day_start.tzinfo
     lines = []
     for key, ivs in by_key.items():
         minutes = seconds.get(key, 0.0) / 60.0
-        if minutes <= 0 or minutes < cfg["min_minutes"]:
+        if minutes <= 0 or own.get(key, 0.0) / 60.0 < cfg["min_minutes"]:
             continue
         ivs.sort(key=lambda x: x.start)
         tags = [t for iv in ivs for t in iv.tags]

@@ -279,6 +279,17 @@ class TestTimeline(unittest.TestCase):
         ids = [l["id"] for l in timeline.build_lines(ivs, cfg(min_minutes=0), self.tasks, start, end)]
         self.assertEqual(sorted(ids), ["task-30558", "task-30581"])
 
+    def test_short_floor_judged_before_the_split(self):
+        # 6 min on a ticket while two other sessions run: a 2 min share, but
+        # 6 real minutes of work — proposed, rounded up to 15 min.
+        ivs = [Interval(at(0), at(6), "claude", Ref(task_id=30581), "prompt", "fix it", ("prompt",)),
+               Interval(at(0), at(60), "claude", Ref(task_id=30558), "edit", "", ("edit",)),
+               Interval(at(0), at(60), "claude", Ref(project_id=554), "edit", "", ("edit",))]
+        start, end = timeline.day_bounds(dt.date(2026, 10, 6), UTC)
+        lines = {l["id"]: l for l in timeline.build_lines(ivs, cfg(), self.tasks, start, end)}
+        self.assertAlmostEqual(lines["task-30581"]["minutes"], 2.0)
+        self.assertEqual(lines["task-30581"]["hours"], 0.25)
+
     def test_clipped_to_day(self):
         ivs = [Interval(at(-600), at(-480), "claude", Ref(task_id=30558), "edit", "", ("edit",))]
         start, end = timeline.day_bounds(dt.date(2026, 10, 6), UTC)
