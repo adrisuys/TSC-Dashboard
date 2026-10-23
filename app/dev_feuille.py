@@ -39,6 +39,12 @@ import ts_config  # noqa: E402
 KEY = "feuille"
 TOKEN = secrets.token_urlsafe(24)
 LOCAL_NAMES = ("127.0.0.1", "localhost", "[::1]")
+# Opened from another computer (over the tailnet), the tab embeds that
+# computer's own review page instead: the tsc-timesheet plugin's server, which
+# `/timesheet` starts on 127.0.0.1:8735. The iframe's address is resolved by
+# the browser, so "127.0.0.1" there is the computer the browser runs on, its
+# traces and its Odoo key; nothing goes through this Mac.
+EMBED_URL = "http://127.0.0.1:8735/"
 # Set by a reverse proxy (Tailscale Serve sets the first and the Tailscale-*
 # identity headers): their presence means the request did not start here.
 PROXY_HEADERS = ("x-forwarded-for", "x-forwarded-host", "forwarded",
@@ -69,7 +75,7 @@ def context(request, port):
     except SystemExit:
         odoo_url = ""
     return {"local": local, "token": TOKEN if local else "", "odoo_url": odoo_url,
-            "local_url": f"http://127.0.0.1:{port}/{KEY}",
+            "local_url": f"http://127.0.0.1:{port}/{KEY}", "embed_url": EMBED_URL,
             "today": dt.date.today().isoformat()}
 
 

@@ -1,20 +1,29 @@
 {# Tab "Ma feuille de temps" — the tsc-timesheet review page, inside the app.
    Context from dev_feuille.context(). The page fills itself from the tab's
    JSON API (static/feuille.js), only for a browser on the Mac that runs the
-   app; elsewhere it says where to open it. Hidden on phones and tablets. #}
+   app. From another computer (over the tailnet) it embeds that computer's own
+   /timesheet page (127.0.0.1:8735) instead. Hidden on phones and tablets. #}
 <p class="phone-only feuille-note">La feuille de temps se remplit depuis un ordinateur.</p>
 
 <div class="desktop-only-block">
 {% if not local %}
-  <div class="callouts">
-    <div class="callout">
-      <b>Disponible uniquement sur le Mac qui héberge l'application.</b>
-      La feuille est reconstruite à partir des traces de ce Mac (sessions Claude Code,
-      historique Chrome, commits git) et elle écrit dans Odoo : elle n'est donc pas
-      servie à travers le tailnet. Ouvrez <a href="{{ local_url }}">{{ local_url }}</a>
-      sur ce Mac-là.
-    </div>
-  </div>
+  {# Another computer (over the tailnet): show that computer's own /timesheet
+     page. The iframe's 127.0.0.1 is the browser's machine, not this Mac. #}
+  <header class="fs-head">
+    <h2>Ma feuille de temps</h2>
+    <span class="muted">Page <code>/timesheet</code> de cet ordinateur ({{ embed_url }})</span>
+    <span class="fs-grow"></span>
+    <button type="button" class="fs-btn"
+            onclick="var f=document.getElementById('fs-embed'); f.src=f.src">Recharger</button>
+    <a class="fs-btn" href="{{ embed_url }}" target="_blank" rel="noopener">Ouvrir à part ↗</a>
+  </header>
+  <p class="muted fs-small fs-embed-help">
+    Page vide ou « connexion refusée » ? Lancez <code>/timesheet</code> dans Claude Code sur
+    cet ordinateur (il démarre la page sur le port 8735), puis « Recharger ». Si Chrome demande
+    l'accès au réseau local, autorisez-le.
+  </p>
+  <iframe id="fs-embed" class="fs-embed" src="{{ embed_url }}" title="Ma feuille de temps"
+          allow="local-network-access; local-network; loopback-network"></iframe>
 {% else %}
 <div id="feuille" data-token="{{ token }}" data-odoo="{{ odoo_url }}" data-today="{{ today }}">
   <header class="fs-head">

@@ -542,3 +542,9 @@ table.fs-table tr.pushed td { color: var(--muted); background: color-mix(in srgb
 .fs-confirm:not([hidden]) { display: inline-flex; gap: .5rem; align-items: center; }
 .fs-toast { position: fixed; right: 1rem; bottom: 4.5rem; z-index: 50; background: var(--fg); color: var(--bg);
   padding: .5rem .9rem; border-radius: 8px; font-size: .86rem; }
+/* Opened from another computer: that computer's /timesheet page (127.0.0.1:8735)
+   in a frame filling the rest of the window. */
+.fs-embed { display: block; width: 100%; height: calc(100vh - 13rem); min-height: 560px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.fs-embed-help { margin: 0 0 .6rem; }
+a.fs-btn { text-decoration: none; display: inline-block; }
